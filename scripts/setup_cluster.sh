@@ -111,6 +111,13 @@ echo "[0/8] Preflight checks..."
 test -f "$CHAMELEON_KEY"
 check "Chameleon SSH key found at $CHAMELEON_KEY"
 
+SEALED_KEY="$HOME/.ssh/sealed-secrets-key-backup.yaml"
+if [ -f "$SEALED_KEY" ]; then
+  echo "  ✓ Sealed Secrets key backup found"
+else
+  echo "  ⚠ Sealed Secrets key backup not found — will generate new key"
+fi
+
 hostname | grep -q "node1"
 check "Running on node1"
 
@@ -290,6 +297,47 @@ done
 test "$METRICS_READY" = "1"
 check "Metrics server is running"
 
+# Install Sealed Secrets controller
+echo "  Installing Sealed Secrets..."
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.3/controller.yaml
+echo "  Waiting for Sealed Secrets controller..."
+for i in $(seq 1 12); do
+  SS_READY=$(kubectl -n kube-system get deployment sealed-secrets-controller -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+  if [ "$SS_READY" = "1" ]; then
+    break
+  fi
+  sleep 10
+done
+test "$SS_READY" = "1"
+check "Sealed Secrets controller is running"
+
+# Restore backed-up key (so existing sealed secrets can be decrypted)
+SEALED_KEY="$HOME/.ssh/sealed-secrets-key-backup.yaml"
+if [ -f "$SEALED_KEY" ]; then
+  kubectl apply -f "$SEALED_KEY"
+  kubectl -n kube-system rollout restart deployment sealed-secrets-controller
+  echo "  Waiting for controller restart..."
+  for i in $(seq 1 12); do
+    SS_READY=$(kubectl -n kube-system get deployment sealed-secrets-controller -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+    if [ "$SS_READY" = "1" ]; then
+      break
+    fi
+    sleep 10
+  done
+  check "Sealed Secrets key restored and controller restarted"
+else
+  echo "  ⚠ No sealed secrets key backup found at $SEALED_KEY — sealed secrets will use a new key"
+fi
+
+# Install kubeseal CLI
+wget -q https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.27.3/kubeseal-0.27.3-linux-amd64.tar.gz
+check "kubeseal downloaded"
+tar -xzf kubeseal-0.27.3-linux-amd64.tar.gz
+check "kubeseal extracted"
+sudo mv kubeseal /usr/local/bin/
+rm -f kubeseal-0.27.3-linux-amd64.tar.gz
+check "kubeseal CLI installed"
+
 # =============================================
 # Step 6: Create Namespaces
 # =============================================
@@ -395,14 +443,16 @@ echo ""
 echo "--- Resource Usage ---"
 kubectl top pods --all-namespaces 2>/dev/null | grep -E "photoprism|mlflow|qdrant|mariadb" || echo "  Metrics not ready yet — run 'kubectl top pods --all-namespaces' in a minute"
 
+FLOATING_IP=$(curl -s ifconfig.me)
+
 echo ""
 echo "============================================"
 echo "  ✓ Setup complete! All checks passed."
 echo "============================================"
 echo ""
 echo "Access services at:"
-echo "  PhotoPrism: http://<FLOATING_IP>:30234  (admin / photoprism-admin)"
-echo "  MLFlow:     http://<FLOATING_IP>:30500"
-echo "  Qdrant:     http://<FLOATING_IP>:30633/dashboard/"
+echo "  PhotoPrism: http://$FLOATING_IP:30234  (admin / photoprism-admin)"
+echo "  MLFlow:     http://$FLOATING_IP:30500"
+echo "  Qdrant:     http://$FLOATING_IP:30633/dashboard/"
 echo ""
 echo "To tear down, run the teardown cells in the Jupyter notebook."
