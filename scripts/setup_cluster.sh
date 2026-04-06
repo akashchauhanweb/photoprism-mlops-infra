@@ -367,6 +367,17 @@ done
 test "$DASH_RUNNING" = "$DASH_TOTAL"
 check "Kubernetes Dashboard installed"
 
+# Install Helm (kubespray may not install it)
+if ! command -v helm &> /dev/null; then
+  curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 -o /tmp/get_helm.sh
+  check "Helm script downloaded"
+  bash /tmp/get_helm.sh > /dev/null 2>&1
+  check "Helm installed"
+  rm -f /tmp/get_helm.sh
+else
+  echo "  ✓ Helm already installed"
+fi
+
 # Install central logging (Loki + Promtail + Grafana)
 echo "  Installing central logging (Loki + Grafana)..."
 helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
