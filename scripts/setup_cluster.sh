@@ -57,8 +57,14 @@ run_with_progress() {
     # Build progress bar (30 chars wide)
     local filled=$(( pct * 30 / 100 ))
     local empty=$(( 30 - filled ))
-    local bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null) 2>/dev/null || true)
-    local space=$(printf '░%.0s' $(seq 1 $empty 2>/dev/null) 2>/dev/null || true)
+    local bar=""
+    local space=""
+    if [ "$filled" -gt 0 ]; then
+      bar=$(printf '█%.0s' $(seq 1 $filled))
+    fi
+    if [ "$empty" -gt 0 ]; then
+      space=$(printf '░%.0s' $(seq 1 $empty))
+    fi
 
     printf "\r  %s: %s%s %3d%% (%d/%d) — %dm%02ds elapsed" \
       "$label" "$bar" "$space" "$pct" "$count" "$total" "$mins" "$secs"
@@ -78,7 +84,7 @@ run_with_progress() {
   local count=$(grep -c "$pattern" "$logfile" 2>/dev/null || echo 0)
 
   if [ $exit_code -eq 0 ]; then
-    local bar=$(printf '█%.0s' $(seq 1 30 2>/dev/null) 2>/dev/null || true)
+    local bar=$(printf '█%.0s' $(seq 1 30))
     printf "\r  %s: %s 100%% (%d tasks) — %dm%02ds total       \n" \
       "$label" "$bar" "$count" "$mins" "$secs"
   else
