@@ -367,6 +367,32 @@ done
 test "$DASH_RUNNING" = "$DASH_TOTAL"
 check "Kubernetes Dashboard installed"
 
+# Install central logging (Loki + Promtail + Grafana)
+echo "  Installing central logging (Loki + Grafana)..."
+helm repo add grafana https://grafana.github.io/helm-charts 2>/dev/null || true
+helm repo update > /dev/null 2>&1 || true
+kubectl create namespace monitoring 2>/dev/null || true
+helm install loki-stack grafana/loki-stack \
+  --namespace monitoring \
+  --set grafana.enabled=true \
+  --set grafana.service.type=NodePort \
+  --set grafana.service.nodePort=30300 \
+  --set loki.persistence.enabled=false \
+  --set grafana.adminPassword=admin 2>/dev/null || true
+echo "  Waiting for logging stack..."
+for i in $(seq 1 18); do
+  LOKI_RUNNING=$(kubectl -n monitoring get pods --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l || true)
+  LOKI_TOTAL=$(kubectl -n monitoring get pods --no-headers 2>/dev/null | wc -l || true)
+  LOKI_RUNNING=${LOKI_RUNNING:-0}
+  LOKI_TOTAL=${LOKI_TOTAL:-0}
+  if [ "$LOKI_RUNNING" = "$LOKI_TOTAL" ] && [ "$LOKI_TOTAL" != "0" ]; then
+    break
+  fi
+  sleep 10
+done
+test "$LOKI_RUNNING" = "$LOKI_TOTAL"
+check "Loki + Promtail + Grafana installed"
+
 # =============================================
 # Step 6: Create Namespaces
 # =============================================
@@ -484,6 +510,7 @@ echo "  PhotoPrism: http://$FLOATING_IP:30234  (admin / photoprism-admin)"
 echo "  MLFlow:     http://$FLOATING_IP:30500"
 echo "  Qdrant:     http://$FLOATING_IP:30633/dashboard/"
 echo "  Dashboard:  https://$FLOATING_IP:30443 (use token below)"
+echo "  Grafana:    http://$FLOATING_IP:30300  (admin / admin)"
 echo ""
 echo "To tear down, run the teardown cells in the Jupyter notebook."
 
