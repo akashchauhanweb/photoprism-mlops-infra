@@ -52,7 +52,7 @@ run_with_progress() {
     local pct=$(( count * 100 / total ))
     if [ "$pct" -gt 99 ]; then pct=99; fi
 
-    printf "\r  %s: %3d%% (%d/%d tasks) — %dm%02ds elapsed   " \
+    printf "\r  %s: ~%3d%% (%d/~%d tasks) — %dm%02ds elapsed   " \
       "$label" "$pct" "$count" "$total" "$mins" "$secs"
 
     sleep 5
