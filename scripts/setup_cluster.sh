@@ -239,7 +239,7 @@ kubectl get nodes > /dev/null 2>&1
 check "kubectl configured and cluster reachable"
 
 # Autocheck: all nodes Ready
-NOT_READY=$(kubectl get nodes --no-headers | grep -v " Ready " | wc -l)
+NOT_READY=$(kubectl get nodes --no-headers | grep -v " Ready " | wc -l || true)
 test "$NOT_READY" -eq 0
 check "All 3 nodes are Ready"
 
@@ -364,7 +364,7 @@ kubectl get nodes
 echo ""
 
 # Autocheck: all nodes Ready (final)
-NOT_READY=$(kubectl get nodes --no-headers | grep -v " Ready " | wc -l)
+NOT_READY=$(kubectl get nodes --no-headers | grep -v " Ready " | wc -l || true)
 test "$NOT_READY" -eq 0
 check "All nodes Ready"
 
@@ -374,7 +374,7 @@ kubectl get pods --all-namespaces | grep -E "photoprism|mlflow|qdrant|mariadb"
 echo ""
 
 # Autocheck: no crashed pods
-CRASHED=$(kubectl get pods --all-namespaces --no-headers | grep -E "photoprism|mlflow|qdrant|mariadb" | grep -v "Running" | wc -l)
+CRASHED=$(kubectl get pods --all-namespaces --no-headers | grep -E "photoprism|mlflow|qdrant|mariadb" | grep -v "Running" | wc -l || true)
 test "$CRASHED" -eq 0
 check "All service pods are Running"
 
