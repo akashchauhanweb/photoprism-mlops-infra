@@ -43,8 +43,11 @@ run_with_progress() {
 
   # Monitor progress
   while kill -0 "$pid" 2>/dev/null; do
-    local count
-    count=$(grep -c "$pattern" "$logfile" 2>/dev/null) || count=0
+    local count=0
+    if [ -f "$logfile" ]; then
+      count=$(grep -c "$pattern" "$logfile" 2>/dev/null || true)
+    fi
+    count=${count:-0}
     local now=$(date +%s)
     local elapsed=$(( now - start_time ))
     local mins=$(( elapsed / 60 ))
