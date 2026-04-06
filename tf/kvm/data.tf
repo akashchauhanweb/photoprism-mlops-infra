@@ -49,3 +49,7 @@ data "openstack_networking_secgroup_v2" "allow_30633" {
 data "openstack_networking_secgroup_v2" "allow_30443" {
   name = "allow-30443"
 }
+
+data "openstack_networking_secgroup_v2" "allow_30300" {
+  name = "allow-30300"
+}
