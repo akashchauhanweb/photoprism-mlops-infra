@@ -338,6 +338,35 @@ sudo mv kubeseal /usr/local/bin/
 rm -f kubeseal-0.27.3-linux-amd64.tar.gz
 check "kubeseal CLI installed"
 
+# Install Kubernetes Dashboard
+echo "  Installing Kubernetes Dashboard..."
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+kubectl -n kubernetes-dashboard patch svc kubernetes-dashboard --type='json' -p='[{"op":"replace","path":"/spec/type","value":"NodePort"},{"op":"add","path":"/spec/ports/0/nodePort","value":30443}]'
+kubectl create serviceaccount dashboard-admin -n kubernetes-dashboard 2>/dev/null || true
+kubectl create clusterrolebinding dashboard-admin --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:dashboard-admin 2>/dev/null || true
+# Create long-lived token secret
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dashboard-admin-token
+  namespace: kubernetes-dashboard
+  annotations:
+    kubernetes.io/service-account.name: dashboard-admin
+type: kubernetes.io/service-account-token
+EOF
+echo "  Waiting for dashboard pods..."
+for i in $(seq 1 12); do
+  DASH_RUNNING=$(kubectl -n kubernetes-dashboard get pods --no-headers 2>/dev/null | grep -c "Running" || true)
+  DASH_TOTAL=$(kubectl -n kubernetes-dashboard get pods --no-headers 2>/dev/null | wc -l || true)
+  if [ "$DASH_RUNNING" = "$DASH_TOTAL" ] && [ "$DASH_TOTAL" != "0" ]; then
+    break
+  fi
+  sleep 10
+done
+test "$DASH_RUNNING" = "$DASH_TOTAL"
+check "Kubernetes Dashboard installed"
+
 # =============================================
 # Step 6: Create Namespaces
 # =============================================
@@ -454,5 +483,14 @@ echo "Access services at:"
 echo "  PhotoPrism: http://$FLOATING_IP:30234  (admin / photoprism-admin)"
 echo "  MLFlow:     http://$FLOATING_IP:30500"
 echo "  Qdrant:     http://$FLOATING_IP:30633/dashboard/"
+echo "  Dashboard:  https://$FLOATING_IP:30443 (use token below)"
 echo ""
 echo "To tear down, run the teardown cells in the Jupyter notebook."
+
+echo "--- Dashboard ---"
+DASH_TOKEN=$(kubectl -n kubernetes-dashboard get secret dashboard-admin-token -o jsonpath='{.data.token}' 2>/dev/null | base64 -d 2>/dev/null || true)
+if [ -n "$DASH_TOKEN" ]; then
+  echo "  Token: $DASH_TOKEN"
+else
+  echo "  ⚠ Dashboard token not ready — run: kubectl -n kubernetes-dashboard create token dashboard-admin"
+fi
