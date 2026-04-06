@@ -29,7 +29,6 @@ check() {
 }
 
 # --- Helper: progress bar for long-running commands ---
-# Usage: run_with_progress "command" "log_file" "label" estimated_total "count_pattern"
 run_with_progress() {
   local cmd="$1"
   local logfile="$2"
@@ -44,30 +43,17 @@ run_with_progress() {
 
   # Monitor progress
   while kill -0 "$pid" 2>/dev/null; do
-    local count=$(grep -c "$pattern" "$logfile" 2>/dev/null || echo 0)
+    local count
+    count=$(grep -c "$pattern" "$logfile" 2>/dev/null) || count=0
     local now=$(date +%s)
     local elapsed=$(( now - start_time ))
     local mins=$(( elapsed / 60 ))
     local secs=$(( elapsed % 60 ))
-
-    # Calculate percentage (cap at 99% until actually done)
     local pct=$(( count * 100 / total ))
     if [ "$pct" -gt 99 ]; then pct=99; fi
 
-    # Build progress bar (30 chars wide)
-    local filled=$(( pct * 30 / 100 ))
-    local empty=$(( 30 - filled ))
-    local bar=""
-    local space=""
-    if [ "$filled" -gt 0 ]; then
-      bar=$(printf '█%.0s' $(seq 1 $filled))
-    fi
-    if [ "$empty" -gt 0 ]; then
-      space=$(printf '░%.0s' $(seq 1 $empty))
-    fi
-
-    printf "\r  %s: %s%s %3d%% (%d/%d) — %dm%02ds elapsed" \
-      "$label" "$bar" "$space" "$pct" "$count" "$total" "$mins" "$secs"
+    printf "\r  %s: %3d%% (%d/%d tasks) — %dm%02ds elapsed   " \
+      "$label" "$pct" "$count" "$total" "$mins" "$secs"
 
     sleep 5
   done
@@ -76,19 +62,18 @@ run_with_progress() {
   wait "$pid"
   local exit_code=$?
 
-  # Final update
   local now=$(date +%s)
   local elapsed=$(( now - start_time ))
   local mins=$(( elapsed / 60 ))
   local secs=$(( elapsed % 60 ))
-  local count=$(grep -c "$pattern" "$logfile" 2>/dev/null || echo 0)
+  local count
+  count=$(grep -c "$pattern" "$logfile" 2>/dev/null) || count=0
 
   if [ $exit_code -eq 0 ]; then
-    local bar=$(printf '█%.0s' $(seq 1 30))
-    printf "\r  %s: %s 100%% (%d tasks) — %dm%02ds total       \n" \
-      "$label" "$bar" "$count" "$mins" "$secs"
+    printf "\r  %s: 100%% (%d tasks) — %dm%02ds total            \n" \
+      "$label" "$count" "$mins" "$secs"
   else
-    printf "\r  %s: FAILED after %dm%02ds (%d tasks completed)        \n" \
+    printf "\r  %s: FAILED after %dm%02ds (%d tasks completed)   \n" \
       "$label" "$mins" "$secs" "$count"
     echo ""
     echo "  Last 30 lines of log:"
