@@ -49,7 +49,10 @@ spec:
             - name: PHOTOPRISM_ADMIN_USER
               value: "admin"
             - name: PHOTOPRISM_ADMIN_PASSWORD
-              value: "photoprism-admin"
+              valueFrom:
+                secretKeyRef:
+                  name: photoprism-secrets
+                  key: photoprism-admin-password
             - name: PHOTOPRISM_SITE_URL
               value: "http://localhost:2342/"
             - name: PHOTOPRISM_DATABASE_DRIVER
@@ -61,7 +64,10 @@ spec:
             - name: PHOTOPRISM_DATABASE_USER
               value: "photoprism"
             - name: PHOTOPRISM_DATABASE_PASSWORD
-              value: "photoprism-db-pass"
+              valueFrom:
+                secretKeyRef:
+                  name: photoprism-secrets
+                  key: mariadb-password
             - name: PHOTOPRISM_DISABLE_TENSORFLOW
               value: "true"
           volumeMounts:
