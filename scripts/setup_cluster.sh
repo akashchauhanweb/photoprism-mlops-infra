@@ -28,6 +28,89 @@ check() {
   fi
 }
 
+# --- Helper: progress bar for long-running commands ---
+# Usage: run_with_progress "command" "log_file" "label" estimated_total "count_pattern"
+run_with_progress() {
+  local cmd="$1"
+  local logfile="$2"
+  local label="$3"
+  local total="$4"
+  local pattern="$5"
+  local start_time=$(date +%s)
+
+  # Run command in background, output to log
+  eval "$cmd" > "$logfile" 2>&1 &
+  local pid=$!
+
+  # Monitor progress
+  while kill -0 "$pid" 2>/dev/null; do
+    local count=$(grep -c "$pattern" "$logfile" 2>/dev/null || echo 0)
+    local now=$(date +%s)
+    local elapsed=$(( now - start_time ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+
+    # Calculate percentage (cap at 99% until actually done)
+    local pct=$(( count * 100 / total ))
+    if [ "$pct" -gt 99 ]; then pct=99; fi
+
+    # Build progress bar (30 chars wide)
+    local filled=$(( pct * 30 / 100 ))
+    local empty=$(( 30 - filled ))
+    local bar=$(printf '█%.0s' $(seq 1 $filled 2>/dev/null) 2>/dev/null || true)
+    local space=$(printf '░%.0s' $(seq 1 $empty 2>/dev/null) 2>/dev/null || true)
+
+    printf "\r  %s: %s%s %3d%% (%d/%d) — %dm%02ds elapsed" \
+      "$label" "$bar" "$space" "$pct" "$count" "$total" "$mins" "$secs"
+
+    sleep 5
+  done
+
+  # Check if command succeeded
+  wait "$pid"
+  local exit_code=$?
+
+  # Final update
+  local now=$(date +%s)
+  local elapsed=$(( now - start_time ))
+  local mins=$(( elapsed / 60 ))
+  local secs=$(( elapsed % 60 ))
+  local count=$(grep -c "$pattern" "$logfile" 2>/dev/null || echo 0)
+
+  if [ $exit_code -eq 0 ]; then
+    local bar=$(printf '█%.0s' $(seq 1 30 2>/dev/null) 2>/dev/null || true)
+    printf "\r  %s: %s 100%% (%d tasks) — %dm%02ds total       \n" \
+      "$label" "$bar" "$count" "$mins" "$secs"
+  else
+    printf "\r  %s: FAILED after %dm%02ds (%d tasks completed)        \n" \
+      "$label" "$mins" "$secs" "$count"
+    echo ""
+    echo "  Last 30 lines of log:"
+    tail -30 "$logfile"
+    echo ""
+    echo "  Full log at: $logfile"
+    echo "  Stopping here. Fix the issue above and re-run the script."
+    exit 1
+  fi
+}
+
+# --- Helper: spinner for medium waits ---
+wait_with_spinner() {
+  local label="$1"
+  local seconds="$2"
+  local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  local i=0
+  local end=$(( $(date +%s) + seconds ))
+
+  while [ $(date +%s) -lt $end ]; do
+    local remaining=$(( end - $(date +%s) ))
+    printf "\r  %s %s (%ds remaining)" "${spin:i%10:1}" "$label" "$remaining"
+    sleep 0.3
+    i=$(( i + 1 ))
+  done
+  printf "\r  ✓ %s                              \n" "$label"
+}
+
 # --- Preflight Check ---
 echo "[0/8] Preflight checks..."
 test -f "$CHAMELEON_KEY"
@@ -136,10 +219,16 @@ declare -a IPS=(192.168.1.11 192.168.1.12 192.168.1.13)
 CONFIG_FILE=inventory/mycluster/hosts.yaml python3 contrib/inventory_builder/inventory.py ${IPS[@]}
 check "Kubespray hosts.yaml generated"
 
-# Run kubespray
-echo "  Running ansible-playbook (this is the long step)..."
-ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml
-check "Kubespray completed"
+# Run kubespray with progress tracking
+# ~650 TASK lines is typical for a 3-node kubespray run
+KUBESPRAY_LOG="/tmp/kubespray_install.log"
+run_with_progress \
+  "ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml" \
+  "$KUBESPRAY_LOG" \
+  "Kubespray" \
+  650 \
+  "^TASK"
+check "Kubespray completed (full log: $KUBESPRAY_LOG)"
 
 # =============================================
 # Step 5: Post-K8s Configuration
@@ -184,16 +273,15 @@ check "CoreDNS patched and restarted"
 
 # Install local-path-provisioner for PersistentVolumeClaims
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.30/deploy/local-path-storage.yaml
-sleep 10
+wait_with_spinner "Waiting for local-path-provisioner" 10
 kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 check "local-path-provisioner installed and set as default StorageClass"
 
 # Install metrics server for resource monitoring
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
-sleep 5
+wait_with_spinner "Waiting for metrics server apply" 5
 kubectl -n kube-system patch deployment metrics-server --type='json' -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":["--cert-dir=/tmp","--secure-port=10250","--kubelet-preferred-address-types=InternalIP","--kubelet-use-node-status-port","--metric-resolution=15s","--kubelet-insecure-tls"]}]'
-echo "  Waiting for metrics server to stabilize..."
-sleep 30
+wait_with_spinner "Waiting for metrics server to stabilize" 30
 
 # Autocheck: metrics server running
 kubectl -n kube-system get deployment metrics-server -o jsonpath='{.status.readyReplicas}' | grep -q "1"
@@ -235,17 +323,40 @@ kubectl apply -f ~/photoprism-mlops-infra/k8s/platform/
 check "Platform manifests applied (MLFlow + Qdrant)"
 
 echo "  Waiting for pods to become ready..."
-kubectl -n photoprism-production wait --for=condition=ready pod -l app=mariadb --timeout=180s
-check "MariaDB pod is ready"
 
-kubectl -n photoprism-production wait --for=condition=ready pod -l app=photoprism --timeout=180s
-check "PhotoPrism pod is ready"
+SERVICES=("photoprism-production:mariadb:MariaDB" "photoprism-production:photoprism:PhotoPrism" "photoprism-platform:qdrant:Qdrant" "photoprism-platform:mlflow:MLFlow")
+TOTAL=${#SERVICES[@]}
+DONE=0
 
-kubectl -n photoprism-platform wait --for=condition=ready pod -l app=qdrant --timeout=180s
-check "Qdrant pod is ready"
-
-kubectl -n photoprism-platform wait --for=condition=ready pod -l app=mlflow --timeout=180s
-check "MLFlow pod is ready"
+for svc in "${SERVICES[@]}"; do
+  IFS=':' read -r ns app label <<< "$svc"
+  DONE=$(( DONE + 1 ))
+  
+  # Spinner while waiting for this pod
+  local_start=$(date +%s)
+  while true; do
+    status=$(kubectl -n "$ns" get pods -l app="$app" --no-headers 2>/dev/null | awk '{print $3}' | head -1)
+    ready=$(kubectl -n "$ns" get pods -l app="$app" --no-headers 2>/dev/null | awk '{print $2}' | head -1)
+    elapsed=$(( $(date +%s) - local_start ))
+    
+    if [ "$status" = "Running" ] && [ "$ready" = "1/1" ]; then
+      printf "\r  ✓ [%d/%d] %s is Running (%ds)                    \n" "$DONE" "$TOTAL" "$label" "$elapsed"
+      break
+    elif [ $elapsed -gt 180 ]; then
+      printf "\r  ✗ [%d/%d] %s timed out after 180s (status: %s)   \n" "$DONE" "$TOTAL" "$label" "$status"
+      echo "  Pod logs:"
+      kubectl -n "$ns" logs -l app="$app" --tail=20 2>/dev/null || true
+      echo ""
+      echo "  Stopping here. Fix the issue above and re-run the script."
+      exit 1
+    else
+      spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+      idx=$(( elapsed % 10 ))
+      printf "\r  %s [%d/%d] Waiting for %s... (status: %s, %ds)" "${spin:idx:1}" "$DONE" "$TOTAL" "$label" "$status" "$elapsed"
+      sleep 3
+    fi
+  done
+done
 
 # =============================================
 # Step 8: Final Verification
