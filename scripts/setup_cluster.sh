@@ -279,7 +279,14 @@ kubectl -n kube-system patch deployment metrics-server --type='json' -p='[{"op":
 wait_with_spinner "Waiting for metrics server to stabilize" 30
 
 # Autocheck: metrics server running
-METRICS_READY=$(kubectl -n kube-system get deployment metrics-server -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+echo "  Waiting for metrics server to become ready..."
+for i in $(seq 1 12); do
+  METRICS_READY=$(kubectl -n kube-system get deployment metrics-server -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+  if [ "$METRICS_READY" = "1" ]; then
+    break
+  fi
+  sleep 10
+done
 test "$METRICS_READY" = "1"
 check "Metrics server is running"
 
