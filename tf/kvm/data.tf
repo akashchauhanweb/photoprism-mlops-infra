@@ -45,3 +45,7 @@ data "openstack_networking_secgroup_v2" "allow_30500" {
 data "openstack_networking_secgroup_v2" "allow_30633" {
   name = "allow-30633-proj24"
 }
+
+data "openstack_networking_secgroup_v2" "allow_30443" {
+  name = "allow-30443"
+}
