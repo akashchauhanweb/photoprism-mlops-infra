@@ -70,7 +70,8 @@ run_with_progress() {
   local mins=$(( elapsed / 60 ))
   local secs=$(( elapsed % 60 ))
   local count
-  count=$(grep -c "$pattern" "$logfile" 2>/dev/null) || count=0
+  count=$(grep -c "$pattern" "$logfile" 2>/dev/null || true)
+  count=${count:-0}
 
   if [ $exit_code -eq 0 ]; then
     printf "\r  %s: 100%% (%d tasks) — %dm%02ds total            \n" \
@@ -278,7 +279,8 @@ kubectl -n kube-system patch deployment metrics-server --type='json' -p='[{"op":
 wait_with_spinner "Waiting for metrics server to stabilize" 30
 
 # Autocheck: metrics server running
-kubectl -n kube-system get deployment metrics-server -o jsonpath='{.status.readyReplicas}' | grep -q "1"
+METRICS_READY=$(kubectl -n kube-system get deployment metrics-server -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)
+test "$METRICS_READY" = "1"
 check "Metrics server is running"
 
 # =============================================
@@ -370,7 +372,7 @@ check "All nodes Ready"
 
 echo ""
 echo "--- Pods ---"
-kubectl get pods --all-namespaces | grep -E "photoprism|mlflow|qdrant|mariadb"
+kubectl get pods --all-namespaces | grep -E "photoprism|mlflow|qdrant|mariadb" || true
 echo ""
 
 # Autocheck: no crashed pods
@@ -380,7 +382,7 @@ check "All service pods are Running"
 
 echo ""
 echo "--- Services ---"
-kubectl get svc --all-namespaces | grep -E "photoprism|mlflow|qdrant|mariadb"
+kubectl get svc --all-namespaces | grep -E "photoprism|mlflow|qdrant|mariadb" || true
 echo ""
 
 echo "--- Resource Usage ---"
