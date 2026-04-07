@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mlops}
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlops} -d ${POSTGRES_DB:-mlops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  data-ingestor:
+    build:
+      context: .
+      dockerfile: data-ingestor/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  data-generator:
+    build:
+      context: .
+      dockerfile: data-generator/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  feature-worker:
+    build:
+      context: .
+      dockerfile: feature-worker/Dockerfile
+    env_file: .env
+
+  batch-compiler:
+    build:
+      context: .
+      dockerfile: batch-compiler/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  vector-indexer:
+    build:
+      context: .
+      dockerfile: vector-indexer/Dockerfile
+    env_file: .env
+    depends_on:
+      - qdrant
+
+  online-feature-worker:
+    build:
+      context: .
+      dockerfile: online-feature-worker/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  qdrant_storage:
