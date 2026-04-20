@@ -32,7 +32,7 @@ Options:
 Available modules:
   00_prereqs   10_security_groups   20_sealed_secrets
   30_databases 40_services          50_photoprism
-  60_network_policies 70_reranker   80_grafana   99_smoke
+  60_network_policies 70_reranker   80_grafana 85_dashboard 99_smoke
 EOF
 }
 while [[ $# -gt 0 ]]; do
@@ -64,7 +64,7 @@ log "node1 floating IP: ${NODE1_FLOATING_IP:-unknown}"
 # ---- Module list ----
 readonly ALL_STEPS=(00_prereqs 10_security_groups 20_sealed_secrets
                     30_databases 40_services 50_photoprism
-                    60_network_policies 70_reranker 80_grafana 99_smoke)
+                    60_network_policies 70_reranker 80_grafana 85_dashboard 99_smoke)
 
 run_step() {
     local step="$1"
@@ -87,10 +87,24 @@ log ""
 log "============================================"
 log "  bring-up complete"
 log "============================================"
+# ---- Credentials (best-effort fetch; blanks if module wasn't run) ----
+GRAFANA_PASS=$(kubectl -n monitoring get secret loki-stack-grafana \
+    -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || true)
+DASH_TOKEN=$(kubectl -n kubernetes-dashboard get secret dashboard-admin-token \
+    -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
+
+log ""
+log "--- Services ---"
 log "PhotoPrism   : http://${NODE1_FLOATING_IP}:30234"
+log "               user: admin  pass: photoprism-admin"
 log "Search API   : http://${NODE1_FLOATING_IP}:30810/search"
+log "Qdrant       : http://${NODE1_FLOATING_IP}:30633/dashboard/"
+log "Reranker API : http://${RERANKER_IP}:8000 (internal only)"
+log ""
+log "--- Platform ---"
 log "Grafana      : http://${NODE1_FLOATING_IP}:30300"
-log "Qdrant       : http://${NODE1_FLOATING_IP}:30633"
-log "K8s dashboard: https://${NODE1_FLOATING_IP}:30443"
-log "Reranker API : http://${RERANKER_IP}:8000 (internal)"
+log "               user: admin  pass: ${GRAFANA_PASS:-<not deployed>}"
+log "K8s Dashboard: https://${NODE1_FLOATING_IP}:30443"
+log "               token: ${DASH_TOKEN:-<not deployed>}"
+log ""
 log "log file     : $LOG_FILE"
