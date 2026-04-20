@@ -179,7 +179,7 @@ async def search(body: SearchIn):
             )
             for rank, h in enumerate(hits):
                 cur.execute(
-                    "INSERT INTO search_results (query_id, rank, image_id, score) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO search_results (query_id, rank, image_id, score, clicked) VALUES (%s, %s, %s, %s, 0)",
                     (query_id, rank + 1, h.image_id, h.score),
                 )
             conn.commit()
@@ -188,3 +188,22 @@ async def search(body: SearchIn):
 
     log.info(f"query_id={query_id} q={body.query!r} hits={len(hits)}")
     return SearchOut(query_id=query_id, hits=hits)
+
+
+class ClickIn(BaseModel):
+    query_id: str
+    image_id: str
+
+
+@app.post("/click")
+def record_click(body: ClickIn):
+    with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE search_results SET clicked = 1 WHERE query_id = %s AND image_id = %s",
+            (body.query_id, body.image_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "result not found")
+        conn.commit()
+    log.info(f"click recorded query_id={body.query_id} image_id={body.image_id}")
+    return {"ok": True}

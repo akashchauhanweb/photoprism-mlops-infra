@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS search_results (
     query_id    UUID         NOT NULL REFERENCES search_queries(query_id) ON DELETE CASCADE,
     image_id    VARCHAR(255) NOT NULL,
     rank        INTEGER      NOT NULL CHECK (rank >= 1),
-    score       FLOAT
+    score       FLOAT,
+    clicked     INTEGER      NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_search_results_query_id ON search_results(query_id);
