@@ -11,3 +11,4 @@ models/
 
 # Salvaged files not yet re-integrated
 _salvage/clouds.yaml
+scripts/config.env
