@@ -35,6 +35,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
+
+@app.middleware("http")
+async def require_internal_token(request, call_next):
+    if request.url.path in ("/health", "/ready"):
+        return await call_next(request)
+    if request.headers.get("X-Internal-Token") != INTERNAL_TOKEN:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "forbidden"}, status_code=403)
+    return await call_next(request)
 
 class TextIn(BaseModel):
     text: str

@@ -1,5 +1,5 @@
 IMAGE ?= akashweb/feature-worker
-TAG   ?= 0.2.0
+TAG   ?= 0.3.0
 
 build:
 	docker build -t $(IMAGE):$(TAG) .

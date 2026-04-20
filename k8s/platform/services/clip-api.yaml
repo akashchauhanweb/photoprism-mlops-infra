@@ -23,8 +23,10 @@ spec:
     spec:
       containers:
       - name: clip-api
-        image: akashweb/clip-api:0.1.0
+        image: akashweb/clip-api:0.1.1
         ports: [{ containerPort: 8001 }]
+        envFrom:
+        - secretRef: { name: internal-token }
         readinessProbe:
           httpGet: { path: /ready, port: 8001 }
           initialDelaySeconds: 15
