@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-worker
+  namespace: photoprism-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: feature-worker }
+  template:
+    metadata:
+      labels: { app: feature-worker }
+    spec:
+      containers:
+      - name: feature-worker
+        image: akashweb/feature-worker:0.1.2
+        envFrom:
+        - secretRef: { name: objectstore-credentials }
+        - secretRef: { name: feature-worker-secrets }
+        env:
+        - { name: QDRANT_HOST, value: "qdrant.photoprism-platform" }
+        - { name: QDRANT_PORT, value: "6333" }
+        resources:
+          requests: { cpu: 500m, memory: 1Gi }
+          limits:   { cpu: "2",  memory: 3Gi }
+

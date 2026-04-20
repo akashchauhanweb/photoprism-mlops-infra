@@ -1,0 +1,7 @@
+boto3==1.35.0
+psycopg2-binary==2.9.9
+Pillow==10.4.0
+qdrant-client==1.11.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.0
+transformers==4.44.0
