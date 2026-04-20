@@ -14,17 +14,30 @@ log "ensuring namespaces exist..."
 kubectl create ns photoprism-platform   --dry-run=client -o yaml | kubectl apply -f -
 kubectl create ns photoprism-production --dry-run=client -o yaml | kubectl apply -f -
 
-log "restoring sealed-secrets master key..."
-# Apply; on fresh cluster this creates, on existing cluster skip if same key already present.
-if kubectl -n kube-system get secret -l sealedsecrets.bitnami.com/sealed-secrets-key=active \
-    -o name 2>/dev/null | grep -q .; then
-    log "  sealed-secrets key already present, skipping restore"
-else
+log "restoring sealed-secrets master key from backup..."
+# Always restore from backup if the file exists. The controller auto-generates
+# a fresh key on first boot, which would diverge from the committed SealedSecrets.
+# Deleting the auto-key and applying the backup ensures the cluster uses the
+# same key that encrypted the repo's SealedSecrets.
+if [[ -f "$SEALED_SECRETS_KEY_BACKUP" ]]; then
+    kubectl -n kube-system delete secret \
+        -l sealedsecrets.bitnami.com/sealed-secrets-key=active 2>/dev/null || true
     kubectl create -f "$SEALED_SECRETS_KEY_BACKUP"
+    log "  backup key restored"
+else
+    warn "  no backup at $SEALED_SECRETS_KEY_BACKUP; controller will use auto-generated key"
+    warn "  existing SealedSecrets in the repo will FAIL to unseal unless resealed"
 fi
 
 kubectl -n kube-system rollout restart deployment sealed-secrets-controller
 kubectl -n kube-system rollout status  deployment sealed-secrets-controller --timeout=2m
+
+# Nudge any SealedSecrets that failed with the old key to re-reconcile
+for ns in photoprism-platform photoprism-production; do
+    kubectl -n "$ns" get sealedsecret -o name 2>/dev/null \
+        | xargs -r -I{} kubectl -n "$ns" annotate {} \
+            reconcile-ts="$(date +%s)" --overwrite >/dev/null || true
+done
 
 log "applying sealed secrets..."
 for f in \
