@@ -1,0 +1,82 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "panels": [
+    { "type": "row", "title": "search-api", "gridPos": {"h":1,"w":24,"x":0,"y":0}, "collapsed": false },
+    {
+      "type": "timeseries", "title": "search-api — request rate",
+      "gridPos": {"h":6,"w":12,"x":0,"y":1},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"search-api\"} |= \"HTTP\" [$__interval]))","refId":"A"}]
+    },
+    {
+      "type": "timeseries", "title": "search-api — error rate",
+      "gridPos": {"h":6,"w":12,"x":12,"y":1},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"search-api\"} |~ \"(?i)error|exception|traceback\" [$__interval]))","refId":"A"}]
+    },
+    { "type": "row", "title": "clip-api", "gridPos": {"h":1,"w":24,"x":0,"y":7}, "collapsed": false },
+    {
+      "type": "timeseries", "title": "clip-api — request rate",
+      "gridPos": {"h":6,"w":12,"x":0,"y":8},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"clip-api\"} |= \"POST /embed\" [$__interval]))","refId":"A"}]
+    },
+    {
+      "type": "timeseries", "title": "clip-api — error rate",
+      "gridPos": {"h":6,"w":12,"x":12,"y":8},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"clip-api\"} |~ \"(?i)error|exception|traceback|403\" [$__interval]))","refId":"A"}]
+    },
+    { "type": "row", "title": "ingest-api", "gridPos": {"h":1,"w":24,"x":0,"y":14}, "collapsed": false },
+    {
+      "type": "timeseries", "title": "ingest-api — webhook rate",
+      "gridPos": {"h":6,"w":12,"x":0,"y":15},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"ingest-api\"} |= \"enqueued\" [$__interval]))","refId":"A"}]
+    },
+    {
+      "type": "timeseries", "title": "ingest-api — error rate",
+      "gridPos": {"h":6,"w":12,"x":12,"y":15},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"ingest-api\"} |~ \"(?i)error|exception|traceback|bad signature\" [$__interval]))","refId":"A"}]
+    },
+    { "type": "row", "title": "feature-worker", "gridPos": {"h":1,"w":24,"x":0,"y":21}, "collapsed": false },
+    {
+      "type": "timeseries", "title": "feature-worker — jobs done rate",
+      "gridPos": {"h":6,"w":12,"x":0,"y":22},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"feature-worker\"} |= \"[done]\" [$__interval]))","refId":"A"}]
+    },
+    {
+      "type": "timeseries", "title": "feature-worker — jobs failed rate",
+      "gridPos": {"h":6,"w":12,"x":12,"y":22},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"feature-worker\"} |= \"[failed]\" [$__interval]))","refId":"A"}]
+    },
+    { "type": "row", "title": "photoprism", "gridPos": {"h":1,"w":24,"x":0,"y":28}, "collapsed": false },
+    {
+      "type": "timeseries", "title": "photoprism — imports",
+      "gridPos": {"h":6,"w":12,"x":0,"y":29},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"photoprism\"} |= \"import: added\" [$__interval]))","refId":"A"}]
+    },
+    {
+      "type": "timeseries", "title": "photoprism — webhook posts",
+      "gridPos": {"h":6,"w":12,"x":12,"y":29},
+      "datasource": {"type":"loki","uid":"P8E80F9AEF21F6940"},
+      "targets": [{"expr":"sum(rate({app=\"photoprism\"} |= \"ingest-webhook\" [$__interval]))","refId":"A"}]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["photoprism","semantic-search"],
+  "templating": {"list":[]},
+  "time": {"from":"now-1h","to":"now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "PhotoPrism Services",
+  "uid": "photoprism-services",
+  "version": 1
+}
