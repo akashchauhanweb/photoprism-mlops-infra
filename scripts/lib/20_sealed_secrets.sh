@@ -42,8 +42,8 @@ done
 
 log "waiting for secrets to materialize..."
 for i in {1..30}; do
-    plat_count=$(kubectl -n photoprism-platform   get secret -o name 2>/dev/null | grep -c . || echo 0)
-    prod_count=$(kubectl -n photoprism-production get secret -o name 2>/dev/null | grep -c . || echo 0)
+    plat_count=$(kubectl -n photoprism-platform   get secret -o name 2>/dev/null | wc -l)
+    prod_count=$(kubectl -n photoprism-production get secret -o name 2>/dev/null | wc -l)
     if [[ "${plat_count:-0}" -ge 6 && "${prod_count:-0}" -ge 2 ]]; then
         log "  platform=$plat_count, production=$prod_count secrets"
         break

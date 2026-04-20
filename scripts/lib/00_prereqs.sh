@@ -2,7 +2,7 @@
 # Sourced by bring_up.sh; uses log/warn/die and env vars.
 
 log "checking CLI tools..."
-for cmd in kubectl kubeseal openstack docker ssh scp jq curl base64; do
+for cmd in kubectl kubeseal openstack ssh scp jq curl base64; do
     command -v "$cmd" >/dev/null || die "missing CLI: $cmd"
 done
 
