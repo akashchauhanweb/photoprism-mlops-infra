@@ -199,11 +199,11 @@ class ClickIn(BaseModel):
 def record_click(body: ClickIn):
     with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE search_results SET clicked = 1 WHERE query_id = %s AND image_id = %s",
+            "UPDATE search_results SET clicked = 1 WHERE query_id = %s::uuid AND image_id = %s",
             (body.query_id, body.image_id),
         )
-        if cur.rowcount == 0:
-            raise HTTPException(404, "result not found")
         conn.commit()
+        if cur.rowcount == 0:
+            log.warning(f"click not matched: query_id={body.query_id} image_id={body.image_id}")
     log.info(f"click recorded query_id={body.query_id} image_id={body.image_id}")
     return {"ok": True}
