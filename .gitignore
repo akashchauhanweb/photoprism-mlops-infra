@@ -1,1 +1,13 @@
 sealed-secrets-key-backup.yaml
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local model caches
+.cache/
+models/
+
+# Salvaged files not yet re-integrated
+_salvage/
