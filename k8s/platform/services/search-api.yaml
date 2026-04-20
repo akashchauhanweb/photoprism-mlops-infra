@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: search-api
-        image: akashweb/search-api:0.1.1
+        image: akashweb/search-api:0.1.2
         ports: [{ containerPort: 8010 }]
         envFrom:
         - secretRef: { name: search-api-secrets }
