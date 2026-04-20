@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: ingest-api
-        image: akashweb/ingest-api:0.1.1
+        image: akashweb/ingest-api:0.1.3
         ports: [{ containerPort: 8004 }]
         envFrom:
         - secretRef: { name: objectstore-credentials }

@@ -42,9 +42,12 @@ spec:
     spec:
       containers:
         - name: photoprism
-          image: photoprism/photoprism:latest
+          image: akashweb/photoprism-ingest:0.1.4
           ports:
             - containerPort: 2342
+          envFrom:
+            - secretRef:
+                name: photoprism-webhook
           env:
             - name: PHOTOPRISM_ADMIN_USER
               value: "admin"
