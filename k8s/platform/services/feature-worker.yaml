@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: feature-worker
-        image: akashweb/feature-worker:0.1.2
+        image: akashweb/feature-worker:0.2.0
         envFrom:
         - secretRef: { name: objectstore-credentials }
         - secretRef: { name: feature-worker-secrets }
