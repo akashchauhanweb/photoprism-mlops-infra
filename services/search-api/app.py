@@ -122,6 +122,9 @@ async def search(body: SearchIn):
         )
         for p in results
     ]
+    log.info("ANN query=%r top_k=%d hits=%d", body.query, body.top_k, len(hits))
+    for i, h in enumerate(hits[:10]):
+        log.info("  ANN[%2d] score=%.4f image_id=%s", i, h.score, h.image_id)
 
     # Optional rerank via GPU reranker-api
     if RERANKER_ENABLED and RERANKER_URL and hits and s3:
@@ -159,8 +162,10 @@ async def search(body: SearchIn):
                     score=float(r_item["score"]),
                 ))
             if new_hits:
+                log.info("RERANK returned %d hits (top_k=%d)", len(new_hits), RERANKER_TOP_K)
+                for i, h in enumerate(new_hits[:10]):
+                    log.info("  RR[%2d] score=%.4f image_id=%s", i, h.score, h.image_id)
                 hits = new_hits
-                log.info(f"reranked {len(new_hits)} hits")
         except Exception as e:
             log.warning(f"rerank failed, returning ANN order: {e}")
 

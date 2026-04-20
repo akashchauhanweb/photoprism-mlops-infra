@@ -92,7 +92,8 @@ def rerank(body: RerankIn):
     processor = state["processor"]
     device = next(model.parameters()).device
 
-    results = []
+    raw_scores = []
+    images_out = []
     with torch.no_grad():
         for doc in body.documents:
             image_ref = doc.get("image", "")
@@ -105,13 +106,15 @@ def rerank(body: RerankIn):
                     image = Image.open(image_ref).convert("RGB")
             except Exception as e:
                 log.warning(f"load fail {image_ref}: {e}")
-                results.append({"image": image_ref, "score": 0.0})
+                raw_scores.append(-999.0)
+                images_out.append(image_ref)
                 continue
 
             messages = [{"role": "user", "content": [
                 {"type": "image", "image": image},
                 {"type": "text", "text":
-                    f"Does this image match: '{query_text}'? Return score 0-1."},
+                    f"Does this image match the description: '{query_text}'?\n"
+                    f"Answer with a relevance score between 0 and 1."},
             ]}]
             text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
             imgs, vids = process_vision_info(messages)
@@ -120,9 +123,17 @@ def rerank(body: RerankIn):
 
             with torch.amp.autocast("cuda", dtype=torch.bfloat16):
                 out = model(**inputs)
-                score = torch.sigmoid(out.logits[:, -1, :].mean()).item()
+                raw = out.logits[:, -1, :].mean().item()
 
-            results.append({"image": image_ref, "score": round(score, 6)})
+            raw_scores.append(raw)
+            images_out.append(image_ref)
 
+    # Softmax across all candidates — proper probability distribution
+    softmax_scores = torch.softmax(torch.tensor(raw_scores), dim=0).tolist()
+
+    results = [
+        {"image": img, "score": round(score, 6)}
+        for img, score in zip(images_out, softmax_scores)
+    ]
     results.sort(key=lambda x: x["score"], reverse=True)
     return RerankOut(results=results)
