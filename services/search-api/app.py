@@ -16,6 +16,7 @@ logging.basicConfig(
 log = logging.getLogger("search-api")
 
 CLIP_API_URL = os.environ.get("CLIP_API_URL", "http://clip-api.photoprism-platform:8001")
+INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant.photoprism-platform:6333")
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "image_embeddings")
 PG_DSN = os.environ["PG_DSN"]
@@ -82,7 +83,11 @@ def ready():
 async def search(body: SearchIn):
     # 1. Embed the query via clip-api
     async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.post(f"{CLIP_API_URL}/embed/text", json={"text": body.query})
+        r = await client.post(
+            f"{CLIP_API_URL}/embed/text",
+            json={"text": body.query},
+            headers={"X-Internal-Token": INTERNAL_TOKEN},
+        )
         r.raise_for_status()
         vector = r.json()["embedding"]
 

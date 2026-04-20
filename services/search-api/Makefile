@@ -1,5 +1,5 @@
 IMAGE ?= akashweb/search-api
-TAG   ?= 0.1.2
+TAG   ?= 0.2.0
 
 build:
 	docker build -t $(IMAGE):$(TAG) .

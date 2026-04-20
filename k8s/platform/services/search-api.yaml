@@ -24,10 +24,11 @@ spec:
     spec:
       containers:
       - name: search-api
-        image: akashweb/search-api:0.1.2
+        image: akashweb/search-api:0.2.0
         ports: [{ containerPort: 8010 }]
         envFrom:
         - secretRef: { name: search-api-secrets }
+        - secretRef: { name: internal-token }
         env:
         - { name: RERANKER_ENABLED, value: "false" }
         readinessProbe:

@@ -22,6 +22,7 @@ BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.environ["S3_ENDPOINT"]
 S3_REGION = os.environ.get("S3_REGION", "chi-tacc")
 CLIP_API_URL = os.environ.get("CLIP_API_URL", "http://clip-api.photoprism-platform:8001")
+INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
 COLLECTION_NAME = "image_embeddings"
 EMBEDDING_DIM = 512
 POLL_INTERVAL = 5  # seconds between polls when queue is empty
@@ -64,7 +65,8 @@ def compute_embedding(image_bytes: bytes) -> list[float]:
     r = httpx.post(
         f"{CLIP_API_URL}/embed/image",
         files={"file": ("image.jpg", image_bytes, "image/jpeg")},
-        timeout=30,
+        headers={"X-Internal-Token": INTERNAL_TOKEN},
+	timeout=30,
     )
     r.raise_for_status()
     return r.json()["embedding"]

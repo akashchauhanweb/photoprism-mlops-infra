@@ -13,10 +13,11 @@ spec:
     spec:
       containers:
       - name: feature-worker
-        image: akashweb/feature-worker:0.2.0
+        image: akashweb/feature-worker:0.3.0
         envFrom:
         - secretRef: { name: objectstore-credentials }
         - secretRef: { name: feature-worker-secrets }
+        - secretRef: { name: internal-token }
         env:
         - { name: QDRANT_HOST, value: "qdrant.photoprism-platform" }
         - { name: QDRANT_PORT, value: "6333" }
