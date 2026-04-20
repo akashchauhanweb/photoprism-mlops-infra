@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingest-api
+  namespace: photoprism-platform
+spec:
+  selector: { app: ingest-api }
+  ports:
+  - { port: 8004, targetPort: 8004 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest-api
+  namespace: photoprism-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ingest-api }
+  template:
+    metadata:
+      labels: { app: ingest-api }
+    spec:
+      containers:
+      - name: ingest-api
+        image: akashweb/ingest-api:0.1.1
+        ports: [{ containerPort: 8004 }]
+        envFrom:
+        - secretRef: { name: objectstore-credentials }
+        - secretRef: { name: ingest-api-secrets }
+        env:
+        - { name: PHOTOPRISM_URL, value: "http://photoprism.photoprism-production:2342" }
+        readinessProbe:
+          httpGet: { path: /ready, port: 8004 }
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet: { path: /health, port: 8004 }
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests: { cpu: 100m, memory: 256Mi }
+          limits:   { cpu: 500m, memory: 512Mi }
