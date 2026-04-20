@@ -137,19 +137,6 @@ spec:
   ingress:
   - ports: [{ protocol: TCP, port: 8010 }]
 ---
-# mlflow: allow from anywhere (NodePort exposed for UI access)
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-mlflow
-  namespace: photoprism-platform
-spec:
-  podSelector:
-    matchLabels: { app: mlflow }
-  policyTypes: [Ingress]
-  ingress:
-  - ports: [{ protocol: TCP, port: 5000 }]
----
 # PRODUCTION namespace
 ---
 # photoprism: public via NodePort; also callable from ingest-api (for /photos/:uid/dl)

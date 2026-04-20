@@ -10,4 +10,4 @@ venv/
 models/
 
 # Salvaged files not yet re-integrated
-_salvage/
+_salvage/clouds.yaml

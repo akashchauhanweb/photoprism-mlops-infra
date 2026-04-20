@@ -32,7 +32,6 @@ spec:
         - secretRef: { name: objectstore-credentials }
         env:
         - { name: RERANKER_ENABLED, value: "true" }
-        - { name: RERANKER_URL, value: "http://192.5.87.42:8000" }
         readinessProbe:
           httpGet: { path: /ready, port: 8010 }
           initialDelaySeconds: 5
