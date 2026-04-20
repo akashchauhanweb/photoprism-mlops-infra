@@ -23,9 +23,25 @@ PG_DSN = os.environ["PG_DSN"]
 
 RERANKER_ENABLED = os.environ.get("RERANKER_ENABLED", "false").lower() == "true"
 RERANKER_URL = os.environ.get("RERANKER_URL", "")
+RERANKER_TOP_K = int(os.environ.get("RERANKER_TOP_K", "10"))
+S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")
+S3_BUCKET = os.environ.get("S3_BUCKET", "")
+S3_ACCESS = os.environ.get("S3_ACCESS_KEY", "")
+S3_SECRET = os.environ.get("S3_SECRET_KEY", "")
+S3_REGION = os.environ.get("S3_REGION", "chi-tacc")
 
 qdrant = QdrantClient(url=QDRANT_URL)
 
+import boto3
+from botocore.client import Config
+s3 = boto3.client(
+    "s3",
+    endpoint_url=S3_ENDPOINT,
+    aws_access_key_id=S3_ACCESS,
+    aws_secret_access_key=S3_SECRET,
+    region_name=S3_REGION,
+    config=Config(signature_version="s3v4"),
+) if S3_ENDPOINT else None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -106,6 +122,47 @@ async def search(body: SearchIn):
         )
         for p in results
     ]
+
+    # Optional rerank via GPU reranker-api
+    if RERANKER_ENABLED and RERANKER_URL and hits and s3:
+        try:
+            docs = []
+            url_to_hit = {}
+            for h in hits[:body.top_k]:
+                if not h.s3_key:
+                    continue
+                url = s3.generate_presigned_url(
+                    "get_object",
+                    Params={"Bucket": S3_BUCKET, "Key": h.s3_key},
+                    ExpiresIn=300,
+                )
+                docs.append({"image": url})
+                url_to_hit[url] = h
+
+            async with httpx.AsyncClient(timeout=60) as client:
+                r = await client.post(
+                    f"{RERANKER_URL}/rerank",
+                    json={"query": {"text": body.query}, "documents": docs},
+                    headers={"X-Internal-Token": INTERNAL_TOKEN},
+                )
+                r.raise_for_status()
+                reranked = r.json()["results"][:RERANKER_TOP_K]
+
+            new_hits = []
+            for r_item in reranked:
+                h = url_to_hit.get(r_item["image"])
+                if h is None:
+                    continue
+                new_hits.append(SearchHit(
+                    image_id=h.image_id,
+                    s3_key=h.s3_key,
+                    score=float(r_item["score"]),
+                ))
+            if new_hits:
+                hits = new_hits
+                log.info(f"reranked {len(new_hits)} hits")
+        except Exception as e:
+            log.warning(f"rerank failed, returning ANN order: {e}")
 
     # 3. Log to Postgres for analytics
     query_id = str(uuid.uuid4())
