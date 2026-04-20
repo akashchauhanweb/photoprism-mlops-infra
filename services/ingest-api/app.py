@@ -80,16 +80,16 @@ def verify_hmac(raw: bytes, signature: str) -> bool:
     return hmac.compare_digest(expected, signature or "")
 
 
-async def photoprism_session() -> httpx.AsyncClient:
-    client = httpx.AsyncClient(base_url=PHOTOPRISM_URL, timeout=30)
+async def photoprism_login(client: httpx.AsyncClient) -> tuple[str, str]:
     r = await client.post(
         "/api/v1/session",
         json={"username": PHOTOPRISM_USER, "password": PHOTOPRISM_PASSWORD},
     )
     r.raise_for_status()
-    token = r.headers.get("X-Session-Id") or r.json().get("id")
-    client.headers["X-Session-Id"] = token
-    return client
+    body = r.json()
+    session_id = r.headers.get("X-Session-Id") or body.get("id")
+    download_token = body.get("config", {}).get("downloadToken") or body.get("data", {}).get("config", {}).get("downloadToken", "")
+    return session_id, download_token
 
 
 @app.post("/webhook/photo-imported")
@@ -101,8 +101,10 @@ async def photo_imported(request: Request):
 
     payload = WebhookPayload.model_validate_json(raw)
 
-    async with await photoprism_session() as client:
-        r = await client.get(f"/api/v1/photos/{payload.photo_uid}/dl")
+    async with httpx.AsyncClient(base_url=PHOTOPRISM_URL, timeout=30) as client:
+        session_id, dl_token = await photoprism_login(client)
+        client.headers["X-Session-Id"] = session_id
+        r = await client.get(f"/api/v1/photos/{payload.photo_uid}/dl", params={"t": dl_token})
         r.raise_for_status()
         image_bytes = r.content
 
