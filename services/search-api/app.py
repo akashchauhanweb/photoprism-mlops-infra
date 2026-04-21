@@ -199,36 +199,52 @@ class ClickIn(BaseModel):
 
 
 async def _click_and_maybe_retrain(body: ClickIn):
-    with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
-        cur.execute(
-            "UPDATE search_results SET clicked = 1 WHERE query_id = %s::uuid AND image_id = %s",
-            (body.query_id, body.image_id),
-        )
-        conn.commit()
-        if cur.rowcount == 0:
-            log.warning(f"click not matched: query_id={body.query_id} image_id={body.image_id}")
-
-    log.info(f"click recorded query_id={body.query_id} image_id={body.image_id}")
-
-    if not RETRAIN_URL:
+    log.info(f"[click] background task started query_id={body.query_id} image_id={body.image_id}")
+    try:
+        with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
+            log.info(f"[click] running UPDATE on search_results")
+            cur.execute(
+                "UPDATE search_results SET clicked = 1 WHERE query_id = %s::uuid AND image_id = %s",
+                (body.query_id, body.image_id),
+            )
+            conn.commit()
+            log.info(f"[click] rowcount={cur.rowcount}")
+            if cur.rowcount == 0:
+                log.warning(f"[click] not matched: query_id={body.query_id} image_id={body.image_id}")
+    except Exception as e:
+        log.error(f"[click] DB update failed: {e}")
         return
 
-    with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM search_results")
-        total = cur.fetchone()[0]
+    log.info(f"[click] recorded query_id={body.query_id} image_id={body.image_id}")
 
-    log.info(f"feedback row count: {total}")
+    if not RETRAIN_URL:
+        log.info(f"[click] RETRAIN_URL not set — skipping retrain check")
+        return
+
+    log.info(f"[click] RETRAIN_URL={RETRAIN_URL} threshold={RETRAIN_THRESHOLD}")
+    try:
+        with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM search_results")
+            total = cur.fetchone()[0]
+    except Exception as e:
+        log.error(f"[click] row count query failed: {e}")
+        return
+
+    log.info(f"[click] feedback row count: {total}")
     if total >= RETRAIN_THRESHOLD:
-        log.info(f"threshold {RETRAIN_THRESHOLD} reached — triggering retrain at {RETRAIN_URL}")
+        log.info(f"[click] threshold {RETRAIN_THRESHOLD} reached — triggering retrain at {RETRAIN_URL}")
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.post(f"{RETRAIN_URL}/train", json={})
-                log.info(f"retrain triggered: status={r.status_code}")
+                log.info(f"[click] retrain triggered: status={r.status_code} body={r.text[:200]}")
         except Exception as e:
-            log.warning(f"retrain trigger failed (non-fatal): {e}")
+            log.warning(f"[click] retrain trigger failed (non-fatal): {e}")
+    else:
+        log.info(f"[click] below threshold ({total}/{RETRAIN_THRESHOLD}) — no retrain")
 
 
 @app.post("/click")
 async def record_click(body: ClickIn, background_tasks: BackgroundTasks):
+    log.info(f"[click] received query_id={body.query_id} image_id={body.image_id}")
     background_tasks.add_task(_click_and_maybe_retrain, body)
     return {"ok": True}
