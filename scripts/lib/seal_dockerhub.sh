@@ -9,6 +9,7 @@
 
 set -euo pipefail
 
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 DEST="$REPO_ROOT/k8s/platform/services/dockerhub-sealed-secret.yaml"
 NS="photoprism-platform"
 
