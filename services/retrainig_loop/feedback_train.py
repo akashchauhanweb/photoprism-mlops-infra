@@ -30,9 +30,9 @@ app = FastAPI(title="PhotoPrism Feedback Training API")
 # ─────────────────────────────────────────────
 # Config
 # ─────────────────────────────────────────────
-DOCKER_HUB_USER   = os.environ.get("DOCKER_HUB_USER", "")
-DOCKER_HUB_PAT    = os.environ.get("DOCKER_HUB_PAT", "")
-RERANKER_API_SRC  = os.environ.get("RERANKER_API_SRC", "/reranker-api")
+DOCKER_HUB_USER  = os.environ.get("DOCKER_HUB_USER", "")
+DOCKERHUB_K8S_NS = os.environ.get("DOCKERHUB_K8S_NS", "photoprism-platform")
+RERANKER_API_SRC       = os.environ.get("RERANKER_API_SRC", "/reranker-api")
 CONFIG_ENV_PATH   = os.environ.get("CONFIG_ENV_PATH", "/scripts/config.env")
 SCRIPTS_DIR       = os.environ.get("SCRIPTS_DIR", "/scripts")
 
@@ -238,12 +238,27 @@ def _update_config_env_tag(config_env: str, new_tag: str):
     open(config_env, "w").write(text)
 
 
+def _get_docker_pat() -> str:
+    """Read Docker Hub PAT from the K8s SealedSecret (same pattern as 70_reranker.sh)."""
+    import base64
+    result = subprocess.run(
+        ["kubectl", "-n", DOCKERHUB_K8S_NS, "get", "secret", "dockerhub-secret",
+         "-o", "jsonpath={.data.DOCKER_HUB_PAT}"],
+        capture_output=True, text=True, check=True,
+    )
+    pat = base64.b64decode(result.stdout.strip()).decode()
+    if not pat:
+        raise RuntimeError("DOCKER_HUB_PAT is empty in K8s secret dockerhub-secret")
+    return pat
+
+
 def _docker_build_push(image: str, tag: str, src_dir: str):
-    if not DOCKER_HUB_USER or not DOCKER_HUB_PAT:
-        raise RuntimeError("DOCKER_HUB_USER / DOCKER_HUB_PAT not set in env")
+    if not DOCKER_HUB_USER:
+        raise RuntimeError("DOCKER_HUB_USER not set in env")
+    pat = _get_docker_pat()  # unsealed from K8s secret at runtime
     result = subprocess.run(
         ["docker", "login", "-u", DOCKER_HUB_USER, "--password-stdin"],
-        input=DOCKER_HUB_PAT, text=True, capture_output=True,
+        input=pat, text=True, capture_output=True,
     )
     if result.returncode != 0:
         raise RuntimeError(f"docker login failed: {result.stderr}")

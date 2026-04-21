@@ -47,6 +47,7 @@ for f in \
     "$REPO_ROOT/k8s/platform/services/ingest-api-sealed-secret.yaml" \
     "$REPO_ROOT/k8s/platform/services/feature-worker-sealed-secret.yaml" \
     "$REPO_ROOT/k8s/platform/services/search-api-sealed-secret.yaml" \
+    "$REPO_ROOT/k8s/platform/services/dockerhub-sealed-secret.yaml" \
     "$REPO_ROOT/k8s/production/sealed-secret.yaml" \
     "$REPO_ROOT/k8s/production/photoprism-webhook-sealed-secret.yaml"; do
     [[ -f "$f" ]] || die "missing sealed secret: $f"
