@@ -8,6 +8,7 @@ declare -A SG_RULES=(
     [allow-30300]="30300"        # grafana
     [allow-30443]="30443"        # k8s dashboard
     [allow-30810]="30810"        # search-api
+    [allow-30532]="30532"        # postgres NodePort (feedback-trainer on GPU node)
 )
 
 log "reconciling security groups..."
