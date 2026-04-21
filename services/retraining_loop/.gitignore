@@ -1,4 +1,4 @@
-.env
+.DS_Store
 __pycache__/
 *.pyc
-/tmp/
+/qwen_lora_weights/
