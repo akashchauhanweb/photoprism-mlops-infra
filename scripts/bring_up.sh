@@ -4,6 +4,12 @@
 
 set -euo pipefail
 
+if [[ ! -f scripts/config.env ]]; then
+    echo '[bring_up] scripts/config.env missing — bootstrapping from example'
+    cp scripts/config.env.example scripts/config.env
+fi
+
+
 # ---- Colors & helpers ----
 readonly GREEN=$'\e[32m' YELLOW=$'\e[33m' RED=$'\e[31m' RESET=$'\e[0m'
 log()  { echo -e "${GREEN}[bring_up]${RESET} $*" | tee -a "$LOG_FILE"; }
