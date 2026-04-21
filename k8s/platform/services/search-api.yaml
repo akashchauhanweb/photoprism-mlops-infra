@@ -31,7 +31,9 @@ spec:
         - secretRef: { name: internal-token }
         - secretRef: { name: objectstore-credentials }
         env:
-        - { name: RERANKER_ENABLED, value: "true" }
+        - { name: RERANKER_ENABLED,  value: "true" }
+        - { name: RETRAIN_URL,       value: "http://192.5.87.42:8000" }
+        - { name: RETRAIN_THRESHOLD, value: "10" }
         readinessProbe:
           httpGet: { path: /ready, port: 8010 }
           initialDelaySeconds: 5
