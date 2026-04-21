@@ -1,0 +1,15 @@
+torch>=2.2.0
+torchvision>=0.17.0
+ftfy
+regex
+tqdm
+Pillow
+numpy
+pyyaml
+mlflow>=3.0.0
+datasets>=2.18.0
+huggingface_hub>=0.22.0
+transformers>=4.45.0
+peft>=0.10.0
+accelerate>=0.28.0
+qwen-vl-utils>=0.0.8

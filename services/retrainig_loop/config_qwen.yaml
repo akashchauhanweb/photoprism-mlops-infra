@@ -1,0 +1,35 @@
+# config_qwen.yaml — CLIP + Qwen2-VL-2B reranker with LoRA
+run_name: "clip-qwen2vl-reranker-v1"
+model: "qwen_reranker"
+query_type: "raw"
+
+mlflow:
+  tracking_uri: "http://mlflow:5000"
+  experiment_name: "photoprism-semantic-search"
+
+clip:
+  model_name: "ViT-B/32"
+  batch_size: 64
+
+reranker:
+  model_name: "Qwen/Qwen2-VL-2B-Instruct"
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  batch_size: 2
+  epochs: 2
+  lr: 2e-4
+  top_k: 10
+  max_length: 512
+
+data:
+  hf_repo: "ar10067/flickr30k-images-CFQ"
+  split: "train"
+  cache_dir: "/tmp/flickr30k"
+
+max_train_samples: 1000
+max_eval_samples: 500
+num_workers: 0
+
+hf_hub:
+  repo_id: "ar10067/clip-qwen2vl-reranker-v1"

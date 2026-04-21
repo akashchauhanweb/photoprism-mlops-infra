@@ -1,0 +1,19 @@
+FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    git wget libgl1-mesa-glx libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir git+https://github.com/openai/CLIP.git
+
+COPY train.py .
+COPY config_baseline.yaml .
+COPY config_qwen.yaml .
+COPY config_qwen_v2.yaml .
+
+ENTRYPOINT ["python", "train.py"]
+CMD ["--config", "config_baseline.yaml"]

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import psycopg
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
@@ -20,6 +20,9 @@ INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
 QDRANT_URL = os.environ.get("QDRANT_URL", "http://qdrant.photoprism-platform:6333")
 COLLECTION = os.environ.get("QDRANT_COLLECTION", "image_embeddings")
 PG_DSN = os.environ["PG_DSN"]
+
+RETRAIN_URL       = os.environ.get("RETRAIN_URL", "")
+RETRAIN_THRESHOLD = int(os.environ.get("RETRAIN_THRESHOLD", "100"))
 
 RERANKER_ENABLED = os.environ.get("RERANKER_ENABLED", "false").lower() == "true"
 RERANKER_URL = os.environ.get("RERANKER_URL", "")
@@ -195,8 +198,7 @@ class ClickIn(BaseModel):
     image_id: str
 
 
-@app.post("/click")
-def record_click(body: ClickIn):
+async def _click_and_maybe_retrain(body: ClickIn):
     with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE search_results SET clicked = 1 WHERE query_id = %s::uuid AND image_id = %s",
@@ -205,5 +207,28 @@ def record_click(body: ClickIn):
         conn.commit()
         if cur.rowcount == 0:
             log.warning(f"click not matched: query_id={body.query_id} image_id={body.image_id}")
+
     log.info(f"click recorded query_id={body.query_id} image_id={body.image_id}")
+
+    if not RETRAIN_URL:
+        return
+
+    with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM search_results")
+        total = cur.fetchone()[0]
+
+    log.info(f"feedback row count: {total}")
+    if total >= RETRAIN_THRESHOLD:
+        log.info(f"threshold {RETRAIN_THRESHOLD} reached — triggering retrain at {RETRAIN_URL}")
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.post(f"{RETRAIN_URL}/train", json={})
+                log.info(f"retrain triggered: status={r.status_code}")
+        except Exception as e:
+            log.warning(f"retrain trigger failed (non-fatal): {e}")
+
+
+@app.post("/click")
+async def record_click(body: ClickIn, background_tasks: BackgroundTasks):
+    background_tasks.add_task(_click_and_maybe_retrain, body)
     return {"ok": True}

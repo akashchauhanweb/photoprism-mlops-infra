@@ -1,0 +1,20 @@
+# config_baseline.yaml — CLIP zero-shot baseline
+run_name: "clip-baseline-vit-b32"
+model: "clip_zeroshot"
+query_type: "raw"
+
+mlflow:
+  tracking_uri: "http://mlflow:5000"
+  experiment_name: "photoprism-semantic-search"
+
+clip:
+  model_name: "ViT-B/32"
+  batch_size: 64
+
+data:
+  hf_repo: "ar10067/flickr30k-images-CFQ"
+  split: "train"
+  cache_dir: "/tmp/flickr30k"
+
+max_eval_samples: 500
+num_workers: 0
