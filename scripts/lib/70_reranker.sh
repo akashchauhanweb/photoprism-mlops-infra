@@ -1,6 +1,11 @@
 # 70_reranker.sh — ensure reranker-api container is running on GPU VM.
 # Idempotent: skip if correct image is already running.
 
+if [[ -z "${RERANKER_IP:-}" ]]; then
+    warn "RERANKER_IP empty — skipping reranker deployment"
+    return 0
+fi
+
 readonly SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
 readonly DESIRED_IMAGE="${DOCKER_HUB_USER}/reranker-api:${RERANKER_API_TAG}"
 

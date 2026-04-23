@@ -13,12 +13,16 @@ log "checking sealed-secrets key backup..."
 [[ -f "$SEALED_SECRETS_KEY_BACKUP" ]] \
     || die "sealed-secrets key backup missing at $SEALED_SECRETS_KEY_BACKUP"
 
-log "checking GPU VM SSH access..."
-[[ -f "$RERANKER_SSH_KEY" ]] || die "GPU VM SSH key missing at $RERANKER_SSH_KEY"
-ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
-    -i "$RERANKER_SSH_KEY" \
-    "$RERANKER_SSH_USER@$RERANKER_IP" "echo ok" >/dev/null \
-    || die "cannot SSH to GPU VM $RERANKER_IP"
+if [[ -z "${RERANKER_IP:-}" ]]; then
+    warn "RERANKER_IP is empty — GPU modules (70_reranker, 75_feedback_trainer) will be skipped"
+else
+    log "checking GPU VM SSH access..."
+    [[ -f "$RERANKER_SSH_KEY" ]] || die "GPU VM SSH key missing at $RERANKER_SSH_KEY"
+    ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no \
+        -i "$RERANKER_SSH_KEY" \
+        "$RERANKER_SSH_USER@$RERANKER_IP" "echo ok" >/dev/null \
+        || die "cannot SSH to GPU VM $RERANKER_IP"
+fi
 
 log "checking OpenStack CLI..."
 openstack --os-cloud "$OS_CLOUD" security group list >/dev/null 2>&1 \

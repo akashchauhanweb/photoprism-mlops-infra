@@ -28,18 +28,31 @@ This will DELETE:
   - Sealed-secrets master key in kube-system
   - Reranker container on GPU VM (${RERANKER_IP})
 
-All data in Postgres, MariaDB, Qdrant, and PhotoPrism storage will be lost.
+A backup will be taken to S3 first (originals, storage, mariadb, qdrant, postgres).
+On failure of any component, teardown proceeds anyway with a loud warning.
 
 EOF
 read -r -p "Type 'destroy' to continue: " ans
 [[ "$ans" == "destroy" ]] || die "aborted"
 
-# ---- Stop GPU reranker ----
-log "stopping reranker on ${RERANKER_IP}..."
-ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i "$RERANKER_SSH_KEY" \
-    "$RERANKER_SSH_USER@$RERANKER_IP" \
-    "docker stop reranker-api 2>/dev/null; docker rm reranker-api 2>/dev/null; true" \
-    || warn "  could not reach GPU VM (already down?)"
+# ---- Snapshot persistent state to S3 BEFORE destroying anything ----
+log "running backup.sh before teardown..."
+if bash "$REPO_ROOT/scripts/backup.sh"; then
+    log "backup OK"
+else
+    warn "backup script reported errors — proceeding with teardown anyway"
+fi
+
+# ---- Stop GPU containers ----
+if [[ -n "${RERANKER_IP:-}" ]]; then
+    log "stopping GPU containers on ${RERANKER_IP}..."
+    ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i "$RERANKER_SSH_KEY" \
+        "$RERANKER_SSH_USER@$RERANKER_IP" \
+        "docker stop reranker-api feedback-trainer 2>/dev/null; docker rm reranker-api feedback-trainer 2>/dev/null; true" \
+        || warn "  could not reach GPU VM (already down?)"
+else
+    warn "RERANKER_IP empty — skipping GPU container cleanup"
+fi
 
 # ---- Delete namespaces ----
 log "deleting K8s namespaces..."
