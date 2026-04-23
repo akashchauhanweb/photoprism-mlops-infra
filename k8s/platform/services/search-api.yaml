@@ -33,7 +33,7 @@ spec:
         - secretRef: { name: objectstore-credentials }
         env:
         - { name: RERANKER_ENABLED,  value: "true" }
-        - { name: RETRAIN_THRESHOLD, value: "10" }
+        - { name: RETRAIN_THRESHOLD, value: "100" }
         readinessProbe:
           httpGet: { path: /ready, port: 8010 }
           initialDelaySeconds: 5
