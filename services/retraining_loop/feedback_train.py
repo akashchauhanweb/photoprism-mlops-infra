@@ -507,25 +507,22 @@ def run_finetuning(pairs, image_lookup, config: dict):
             else:
                 log.info("DOCKER_HUB_USER or RERANKER_API_SRC not set — skipping image rebuild")
 
-            training_status = {
+            training_status.update({
                 "is_training": False,
                 "last_trained": time.time(),
                 "status": "completed",
                 "run_id": run.info.run_id,
-                "avg_loss": avg_loss
-            }
+                "avg_loss": avg_loss,
+            })
 
             return run.info.run_id
 
     except Exception as e:
         log.error(f"Fine-tuning failed: {e}")
-        training_status = {
+        training_status.update({
             "is_training": False,
-            "last_trained": None,
             "status": f"failed: {str(e)}",
-            "run_id": None,
-            "avg_loss": None
-        }
+        })
         raise
 
 
@@ -546,8 +543,32 @@ def health():
 
 @app.get("/training/status")
 def get_training_status():
-    """Check if training is running — for DevOps monitoring."""
-    return training_status
+    """Return in-memory status; if no completed run in memory, query MLflow for last run."""
+    out = dict(training_status)
+    # If in-memory has no last_trained, look up the most recent successful run in MLflow
+    if not out.get("last_trained"):
+        try:
+            import mlflow
+            mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+            client = mlflow.tracking.MlflowClient()
+            exp = client.get_experiment_by_name(MLFLOW_EXPERIMENT)
+            if exp:
+                runs = client.search_runs(
+                    experiment_ids=[exp.experiment_id],
+                    filter_string="status = 'FINISHED'",
+                    order_by=["start_time DESC"],
+                    max_results=1,
+                )
+                if runs:
+                    r = runs[0]
+                    out["last_trained"]   = r.info.end_time / 1000.0 if r.info.end_time else None
+                    out["run_id"]         = r.info.run_id
+                    out["run_name"]       = r.info.run_name
+                    out["avg_loss"]       = r.data.metrics.get("epoch_loss")
+                    out["status"]         = out.get("status") or "idle_with_history"
+        except Exception as e:
+            out["mlflow_lookup_error"] = str(e)
+    return out
 
 
 @app.post("/train", response_model=TrainResponse)
