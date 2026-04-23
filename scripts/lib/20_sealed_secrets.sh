@@ -65,4 +65,26 @@ for i in {1..30}; do
     sleep 2
 done
 
+log "validating SealedSecrets decrypted successfully..."
+failed=0
+for ns in photoprism-platform photoprism-production; do
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        status=$(kubectl -n "$ns" get sealedsecret "$name" \
+            -o jsonpath='{.status.conditions[?(@.type=="Synced")].status}' 2>/dev/null)
+        reason=$(kubectl -n "$ns" get sealedsecret "$name" \
+            -o jsonpath='{.status.conditions[?(@.type=="Synced")].message}' 2>/dev/null)
+        if [[ "$status" != "True" ]]; then
+            warn "  FAIL $ns/$name — status='${status:-unknown}' reason='${reason:-no status yet}'"
+            failed=$((failed + 1))
+        fi
+    done < <(kubectl -n "$ns" get sealedsecret -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | tr ' ' '\n')
+done
+
+if (( failed > 0 )); then
+    die "sealed-secrets validation failed: $failed SealedSecret(s) did not decrypt. \
+Likely cause: the backup key at \$SEALED_SECRETS_KEY_BACKUP doesn'"'"'t match the one \
+used to encrypt the committed YAMLs. Re-seal the secrets or restore the correct key."
+fi
+
 log "sealed secrets OK"
