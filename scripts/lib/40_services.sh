@@ -13,10 +13,17 @@ kubectl apply -f "$REPO_ROOT/k8s/platform/services/search-api.yaml"
 log "applying feature-worker..."
 kubectl apply -f "$REPO_ROOT/k8s/platform/services/feature-worker.yaml"
 
-log "setting RERANKER_URL at runtime..."
-kubectl -n photoprism-platform set env deployment/search-api \
-    RERANKER_URL="http://${RERANKER_IP}:8000" \
-    RETRAIN_URL="http://${RERANKER_IP}:8002"
+if [[ -n "${RERANKER_IP:-}" ]]; then
+    log "setting RERANKER_URL at runtime (RERANKER_IP=${RERANKER_IP})..."
+    kubectl -n photoprism-platform set env deployment/search-api \
+        RERANKER_URL="http://${RERANKER_IP}:8000" \
+        RETRAIN_URL="http://${RERANKER_IP}:8002" \
+        RERANKER_ENABLED=true
+else
+    warn "RERANKER_IP empty — disabling reranker in search-api"
+    kubectl -n photoprism-platform set env deployment/search-api \
+        RERANKER_ENABLED=false
+fi
 
 log "waiting for rollouts..."
 kubectl -n photoprism-platform rollout status deployment/clip-api        --timeout=3m
