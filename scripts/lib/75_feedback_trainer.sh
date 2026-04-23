@@ -69,7 +69,7 @@ else
           -e POSTGRES_URI='$POSTGRES_URI' \
           -e QDRANT_URL='$QDRANT_URL' \
           -e MLFLOW_TRACKING_URI='$MLFLOW_TRACKING_URI' \
-          -e MIN_FEEDBACK_SAMPLES='${MIN_FEEDBACK_SAMPLES:-10}' \
+          -e MIN_FEEDBACK_SAMPLES='${MIN_FEEDBACK_SAMPLES:-100}' \
           -e S3_BUCKET='$S3_BUCKET' \
           -e S3_ENDPOINT='$S3_ENDPOINT' \
           -e S3_ACCESS_KEY='$S3_ACCESS_KEY' \
