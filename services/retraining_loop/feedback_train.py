@@ -336,11 +336,14 @@ def run_finetuning(pairs, image_lookup, config: dict):
 
     training_status["is_training"] = True
     training_status["status"] = "training"
+    training_status["started_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     try:
         mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
         with mlflow.start_run(run_name=config.get("run_name", f"feedback-finetune-{int(time.time())}")) as run:
+            training_status["run_id"] = run.info.run_id
+            training_status["run_name"] = run.info.run_name
 
             # Log all config
             mlflow.log_param("training_type", "feedback_finetuning")
