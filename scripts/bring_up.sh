@@ -55,6 +55,15 @@ done
     || die "scripts/config.env not found. Copy scripts/config.env.example and fill it in."
 # shellcheck disable=SC1091
 source "$REPO_ROOT/scripts/config.env"
+
+# If RERANKER_IP is empty/placeholder, prompt for it (interactive runs only)
+if [[ -z "${RERANKER_IP:-}" || "$RERANKER_IP" == "<FILL_IN>" ]]; then
+    if [[ -t 0 ]]; then
+        read -rp "[bring_up] RERANKER_IP (GPU VM floating IP, blank to skip GPU steps): " RERANKER_IP
+    else
+        warn "RERANKER_IP empty and non-interactive shell — GPU steps will be skipped"
+    fi
+fi
 export OS_CLOUD RERANKER_IP RERANKER_SSH_USER RERANKER_SSH_KEY
 export DOCKER_HUB_USER SEALED_SECRETS_KEY_BACKUP
 export RETRAIN_THRESHOLD MIN_FEEDBACK_SAMPLES
