@@ -1,8 +1,8 @@
 # _s3_common.sh — shared S3/rclone helpers for backup.sh and restore modules.
 # Sourced, not executed. Uses log/warn/die from bring_up.sh.
 
-readonly BACKUP_PREFIX="${BACKUP_PREFIX:-backups}"
-readonly RCLONE_REMOTE="${RCLONE_REMOTE:-chi}"
+BACKUP_PREFIX="${BACKUP_PREFIX:-backups}"
+RCLONE_REMOTE="${RCLONE_REMOTE:-chi}"
 
 s3_load_creds() {
     log "loading S3 creds from objectstore-credentials secret..."
