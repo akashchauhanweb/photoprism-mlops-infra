@@ -26,15 +26,22 @@ else
     $SSH "docker pull $DESIRED_IMAGE"
     $SSH "docker run -d --name reranker-api --gpus all --restart unless-stopped \
           -p 8000:8000 -e INTERNAL_TOKEN='$TOKEN' $DESIRED_IMAGE"
-    log "  waiting for reranker startup (60s)..."
-    sleep 60
+    log "  waiting for reranker to become healthy (up to 180s)..."
 fi
 
-log "verifying reranker health..."
-if curl -sS --max-time 5 "http://${RERANKER_IP}:8000/health" | grep -q '"ok":true'; then
-    log "  reranker healthy"
+deadline=$((SECONDS + 180))
+healthy=0
+while (( SECONDS < deadline )); do
+    if curl -sS --max-time 5 "http://${RERANKER_IP}:8000/health" 2>/dev/null | grep -q '"ok":true'; then
+        healthy=1
+        break
+    fi
+    sleep 3
+done
+if (( healthy == 1 )); then
+    log "  reranker healthy (after $((SECONDS - (deadline - 180)))s)"
 else
-    warn "  reranker did not respond — check 'docker logs reranker-api' on $RERANKER_IP"
+    warn "  reranker did not respond within 180s — check 'docker logs reranker-api' on $RERANKER_IP"
 fi
 
 log "reranker OK"

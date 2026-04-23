@@ -81,15 +81,22 @@ else
           -e AWS_DEFAULT_REGION='$S3_REGION' \
           -e DOCKER_HUB_USER='$DOCKER_HUB_USER' \
           $DESIRED_IMAGE"
-    log "  waiting for feedback-trainer startup (30s)..."
-    sleep 30
+    log "  waiting for feedback-trainer to become healthy (up to 120s)..."
 fi
 
-log "verifying feedback-trainer health..."
-if curl -sS --max-time 5 "http://${RERANKER_IP}:8002/health" | grep -q '"status":"ok"'; then
+deadline=$((SECONDS + 120))
+healthy=0
+while (( SECONDS < deadline )); do
+    if curl -sS --max-time 5 "http://${RERANKER_IP}:8002/health" 2>/dev/null | grep -q '"status":"ok"'; then
+        healthy=1
+        break
+    fi
+    sleep 3
+done
+if (( healthy == 1 )); then
     log "  feedback-trainer healthy"
 else
-    warn "  feedback-trainer did not respond — check 'docker logs feedback-trainer' on $RERANKER_IP"
+    warn "  feedback-trainer did not respond within 120s — check 'docker logs feedback-trainer' on $RERANKER_IP"
 fi
 
 log "feedback-trainer OK"
