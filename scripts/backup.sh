@@ -81,22 +81,22 @@ backup_mariadb() {
     pod=$(kubectl -n "$ns" get pod -l app=mariadb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     [[ -n "$pod" ]] || { warn "no mariadb pod; skipping"; return 1; }
     local user pass db
-    user=$(kubectl -n "$ns" get secret mariadb-credentials -o jsonpath='{.data.MYSQL_USER}' 2>/dev/null | base64 -d)
-    pass=$(kubectl -n "$ns" get secret mariadb-credentials -o jsonpath='{.data.MYSQL_PASSWORD}' 2>/dev/null | base64 -d)
-    db=$(kubectl -n "$ns" get secret mariadb-credentials -o jsonpath='{.data.MYSQL_DATABASE}' 2>/dev/null | base64 -d)
+    user="photoprism"
+    db="photoprism"
+    pass=$(kubectl -n "$ns" get secret photoprism-secrets -o jsonpath='{.data.mariadb-password}' 2>/dev/null | base64 -d)
     [[ -n "$user" && -n "$pass" && -n "$db" ]] \
         || { warn "mariadb creds missing; skipping"; return 1; }
     local out="$WORKDIR/mariadb.sql.gz"
     log "  dumping db=$db from pod $pod..."
     kubectl -n "$ns" exec "$pod" -- sh -c \
-        "mysqldump -u'$user' -p'$pass' --single-transaction --routines --triggers '$db'" \
+        "mariadb-dump -u'$user' -p'$pass' --single-transaction --routines --triggers '$db'" \
         | gzip > "$out" \
         || { warn "mysqldump FAILED"; return 1; }
     log "  size: $(du -h "$out" | cut -f1)"
     s3_upload "$out" mariadb sql.gz
 }
 
-# ---- 4. qdrant (snapshot API) ----
+# ---- 4. qdrant (snapshot API via port-forward; pod has no wget/curl) ----
 backup_qdrant() {
     log "=== qdrant ==="
     local ns=photoprism-platform
@@ -104,24 +104,31 @@ backup_qdrant() {
     pod=$(kubectl -n "$ns" get pod -l app=qdrant -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     [[ -n "$pod" ]] || { warn "no qdrant pod; skipping"; return 1; }
     local coll="image_embeddings"
+
+    # Port-forward qdrant to local 16333 in background
+    kubectl -n "$ns" port-forward "$pod" 16333:6333 >/dev/null 2>&1 &
+    local pf_pid=$!
+    trap "kill $pf_pid 2>/dev/null" RETURN
+    sleep 2
+
     log "  creating snapshot for collection=$coll..."
     local snap_name
-    snap_name=$(kubectl -n "$ns" exec "$pod" -- sh -c \
-        "wget -qO- --post-data='' http://localhost:6333/collections/${coll}/snapshots" \
+    snap_name=$(curl -sS -X POST "http://localhost:16333/collections/${coll}/snapshots" \
         | jq -r '.result.name' 2>/dev/null)
     [[ -n "$snap_name" && "$snap_name" != "null" ]] \
-        || { warn "qdrant snapshot create FAILED"; return 1; }
+        || { warn "qdrant snapshot create FAILED"; kill $pf_pid 2>/dev/null; return 1; }
     log "  snapshot: $snap_name"
+
     local out="$WORKDIR/qdrant.snapshot"
     log "  downloading snapshot..."
-    kubectl -n "$ns" exec "$pod" -- sh -c \
-        "wget -qO- http://localhost:6333/collections/${coll}/snapshots/${snap_name}" \
-        > "$out" \
-        || { warn "qdrant snapshot download FAILED"; return 1; }
+    curl -sS -o "$out" "http://localhost:16333/collections/${coll}/snapshots/${snap_name}" \
+        || { warn "qdrant snapshot download FAILED"; kill $pf_pid 2>/dev/null; return 1; }
+
     # Clean up snapshot on qdrant disk
-    kubectl -n "$ns" exec "$pod" -- sh -c \
-        "wget -q --method=DELETE http://localhost:6333/collections/${coll}/snapshots/${snap_name} -O /dev/null" \
+    curl -sS -X DELETE "http://localhost:16333/collections/${coll}/snapshots/${snap_name}" \
         >/dev/null 2>&1 || true
+
+    kill $pf_pid 2>/dev/null
     log "  size: $(du -h "$out" | cut -f1)"
     s3_upload "$out" qdrant snapshot
 }
