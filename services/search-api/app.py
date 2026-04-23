@@ -114,7 +114,7 @@ async def search(body: SearchIn):
     results = qdrant.search(
         collection_name=COLLECTION,
         query_vector=vector,
-        limit=body.top_k,
+        limit=min(body.top_k, 10),
     )
 
     hits = [
@@ -134,7 +134,7 @@ async def search(body: SearchIn):
         try:
             docs = []
             url_to_hit = {}
-            for h in hits[:body.top_k]:
+            for h in hits[:10]:
                 if not h.s3_key:
                     continue
                 url = s3.generate_presigned_url(

@@ -25,6 +25,7 @@ spec:
       containers:
       - name: search-api
         image: akashweb/search-api:0.3.3
+        imagePullPolicy: Always
         ports: [{ containerPort: 8010 }]
         envFrom:
         - secretRef: { name: search-api-secrets }
