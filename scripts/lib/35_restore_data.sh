@@ -34,9 +34,9 @@ restore_postgres() {
     kubectl -n "$ns" wait --for=condition=Ready pod/"$pod" --timeout=3m \
         || { warn "  [postgres] pod not ready"; return 1; }
 
-    log "  [postgres] loading dump into db=$db..."
+    log "  [postgres] loading pg_dumpall into all DBs..."
     if gunzip -c "$dump" | kubectl -n "$ns" exec -i "$pod" -- \
-        psql -U "$user" -d "$db" -v ON_ERROR_STOP=1 -q >/dev/null; then
+        psql -U "$user" -d "postgres" -v ON_ERROR_STOP=1 -q >/dev/null; then
         log "  [postgres] restore OK"
     else
         warn "  [postgres] psql load FAILED"

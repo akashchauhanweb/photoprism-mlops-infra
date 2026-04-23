@@ -15,7 +15,8 @@ kubectl apply -f "$REPO_ROOT/k8s/platform/services/feature-worker.yaml"
 
 log "setting RERANKER_URL at runtime..."
 kubectl -n photoprism-platform set env deployment/search-api \
-    RERANKER_URL="http://${RERANKER_IP}:8000"
+    RERANKER_URL="http://${RERANKER_IP}:8000" \
+    RETRAIN_URL="http://${RERANKER_IP}:8002"
 
 log "waiting for rollouts..."
 kubectl -n photoprism-platform rollout status deployment/clip-api        --timeout=3m

@@ -69,6 +69,8 @@ spec:
     - namespaceSelector:
         matchLabels: { kubernetes.io/metadata.name: photoprism-platform }
     ports: [{ protocol: TCP, port: 5432 }]
+  # Allow NodePort 30532 from anywhere (feedback-trainer on GPU VM, external debugging)
+  - ports: [{ protocol: TCP, port: 5432 }]
 ---
 # qdrant: platform services only
 apiVersion: networking.k8s.io/v1
@@ -166,3 +168,21 @@ spec:
   - from:
     - podSelector: { matchLabels: { app: photoprism } }
     ports: [{ protocol: TCP, port: 3306 }]
+---
+# mlflow: platform services + NodePort 30500 from anywhere
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mlflow
+  namespace: photoprism-platform
+spec:
+  podSelector:
+    matchLabels: { app: mlflow }
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: photoprism-platform }
+    ports: [{ protocol: TCP, port: 5000 }]
+  # Allow NodePort 30500 from anywhere (feedback-trainer on GPU VM + browser UI)
+  - ports: [{ protocol: TCP, port: 5000 }]

@@ -77,3 +77,17 @@ CREATE TABLE IF NOT EXISTS feature_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_feature_jobs_status ON feature_jobs(status);
+
+-- ---------------------------------------------------------------------------
+-- MLflow tracking database
+-- Separate DB, same superuser. MLflow creates its own schema on first connect.
+-- ---------------------------------------------------------------------------
+SELECT 'CREATE DATABASE mlflow' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'mlflow')\gexec
+
+-- ---------------------------------------------------------------------------
+-- Training provenance: which rows have been used in a training run.
+-- NULL = not yet used. Stamped with NOW() after successful training.
+-- ---------------------------------------------------------------------------
+ALTER TABLE search_results ADD COLUMN IF NOT EXISTS trained_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_search_results_trained_at_null
+    ON search_results (trained_at) WHERE trained_at IS NULL;

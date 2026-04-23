@@ -36,6 +36,7 @@ RERANKER_API_SRC       = os.environ.get("RERANKER_API_SRC", "/reranker-api")
 CONFIG_ENV_PATH   = os.environ.get("CONFIG_ENV_PATH", "/scripts/config.env")
 SCRIPTS_DIR       = os.environ.get("SCRIPTS_DIR", "/scripts")
 
+_LAST_FETCH_IDS: list = []
 MLFLOW_TRACKING_URI  = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 MLFLOW_EXPERIMENT    = os.environ.get("MLFLOW_EXPERIMENT", "photoprism-semantic-search")
 POSTGRES_URI         = os.environ.get("POSTGRES_URI", "postgresql://user:password@postgres:5432/photoprism")
@@ -104,12 +105,12 @@ def fetch_feedback(min_samples: int):
         conn = psycopg2.connect(POSTGRES_URI)
         cur = conn.cursor()
 
-        # Fetch recent feedback — last 48 hours, joined from actual schema
+        # Fetch untrained feedback rows (trained_at IS NULL)
         cur.execute("""
-            SELECT q.query_text, r.image_id, r.clicked
+            SELECT r.result_id, q.query_text, r.image_id, r.clicked
             FROM search_results r
             JOIN search_queries q ON r.query_id = q.query_id
-            WHERE q.timestamp > NOW() - INTERVAL '48 hours'
+            WHERE r.trained_at IS NULL
             ORDER BY q.timestamp DESC
             LIMIT %s
         """, (min_samples * 5,))
@@ -124,8 +125,10 @@ def fetch_feedback(min_samples: int):
             log.warning(f"Only {len(rows)} feedback rows — need {min_samples} to train")
             return None
 
-        # Convert to training pairs
-        pairs = [(row[0], row[1], 1.0 if row[2] == 1 else 0.0) for row in rows]
+        # Convert to training pairs; keep result_ids for later stamping
+        global _LAST_FETCH_IDS
+        _LAST_FETCH_IDS = [row[0] for row in rows]
+        pairs = [(row[1], row[2], 1.0 if row[3] == 1 else 0.0) for row in rows]
         positives = sum(1 for _, _, l in pairs if l == 1.0)
         negatives = sum(1 for _, _, l in pairs if l == 0.0)
         log.info(f"Training pairs: {len(pairs)} ({positives} positive, {negatives} negative)")
@@ -194,6 +197,21 @@ def fetch_images(image_ids):
                     image = Image.open(payload["image_path"]).convert("RGB")
                     image_lookup[image_id] = image
 
+                elif "s3_key" in payload:
+                    if not hasattr(fetch_images, "_s3"):
+                        import boto3
+                        fetch_images._s3 = boto3.client(
+                            "s3",
+                            endpoint_url=os.environ["S3_ENDPOINT"],
+                            aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+                            aws_secret_access_key=os.environ["S3_SECRET_KEY"],
+                            region_name=os.environ.get("S3_REGION", ""),
+                        )
+                        fetch_images._bucket = os.environ["S3_BUCKET"]
+                    obj = fetch_images._s3.get_object(Bucket=fetch_images._bucket, Key=payload["s3_key"])
+                    image = Image.open(BytesIO(obj["Body"].read())).convert("RGB")
+                    image_lookup[image_id] = image
+
                 else:
                     log.warning(f"No image data found for {image_id} in Qdrant payload")
 
@@ -239,16 +257,10 @@ def _update_config_env_tag(config_env: str, new_tag: str):
 
 
 def _get_docker_pat() -> str:
-    """Read Docker Hub PAT from the K8s SealedSecret (same pattern as 70_reranker.sh)."""
-    import base64
-    result = subprocess.run(
-        ["kubectl", "-n", DOCKERHUB_K8S_NS, "get", "secret", "dockerhub-secret",
-         "-o", "jsonpath={.data.DOCKER_HUB_PAT}"],
-        capture_output=True, text=True, check=True,
-    )
-    pat = base64.b64decode(result.stdout.strip()).decode()
+    """Read Docker Hub PAT from env (injected by 75_feedback_trainer.sh)."""
+    pat = os.environ.get("DOCKER_HUB_PAT", "").strip()
     if not pat:
-        raise RuntimeError("DOCKER_HUB_PAT is empty in K8s secret dockerhub-secret")
+        raise RuntimeError("DOCKER_HUB_PAT env var is empty")
     return pat
 
 
@@ -269,14 +281,41 @@ def _docker_build_push(image: str, tag: str, src_dir: str):
 
 
 def _redeploy_via_script():
-    reranker_script = os.path.join(SCRIPTS_DIR, "lib", "70_reranker.sh")
-    if not os.path.isfile(reranker_script):
-        log.warning(f"70_reranker.sh not found at {reranker_script} — skipping redeploy")
-        return
-    # Source config.env so the script picks up the updated RERANKER_API_TAG
-    cmd = f"set -a && source {CONFIG_ENV_PATH} && set +a && bash {reranker_script}"
-    subprocess.run(cmd, shell=True, check=True, executable="/bin/bash")
-    log.info("70_reranker.sh completed — reranker redeployed")
+    """Restart reranker-api container on the same GPU VM with the new tag."""
+    image = f"{DOCKER_HUB_USER}/reranker-api"
+    new_tag = _get_new_reranker_tag()
+    full = f"{image}:{new_tag}"
+    log.info(f"Restarting reranker-api with {full}...")
+    # Need INTERNAL_TOKEN — if already running, reuse it
+    token = subprocess.run(
+        ["docker", "inspect", "reranker-api", "--format",
+         "{{range .Config.Env}}{{println .}}{{end}}"],
+        capture_output=True, text=True,
+    ).stdout
+    internal_token = ""
+    for line in token.splitlines():
+        if line.startswith("INTERNAL_TOKEN="):
+            internal_token = line.split("=", 1)[1]
+            break
+    subprocess.run(["docker", "stop", "reranker-api"], check=False)
+    subprocess.run(["docker", "rm", "reranker-api"], check=False)
+    subprocess.run(["docker", "pull", full], check=True)
+    subprocess.run([
+        "docker", "run", "-d", "--name", "reranker-api", "--gpus", "all",
+        "--restart", "unless-stopped", "-p", "8000:8000",
+        "-e", f"INTERNAL_TOKEN={internal_token}",
+        full,
+    ], check=True)
+    log.info(f"reranker-api restarted with {full}")
+
+
+def _get_new_reranker_tag() -> str:
+    """Read the latest RERANKER_API_TAG from config.env (updated by _bump_tag)."""
+    with open(CONFIG_ENV_PATH) as f:
+        for line in f:
+            if line.startswith("RERANKER_API_TAG="):
+                return line.split("=", 1)[1].strip().strip('"')
+    raise RuntimeError("RERANKER_API_TAG not found in config.env")
 
 
 # ─────────────────────────────────────────────
@@ -380,8 +419,7 @@ def run_finetuning(pairs, image_lookup, config: dict):
                     image_inputs, video_inputs = process_vision_info(messages)
                     inputs = processor(
                         text=[text], images=image_inputs, videos=video_inputs,
-                        padding=True, truncation=True,
-                        max_length=512, return_tensors="pt"
+                        padding=True, return_tensors="pt"
                     )
                     inputs = {k: v.to(device) for k, v in inputs.items()}
                     label_t = torch.tensor(label, dtype=torch.float32).to(device)
@@ -427,6 +465,20 @@ def run_finetuning(pairs, image_lookup, config: dict):
             # Save LoRA weights to disk + MLflow
             log.info(f"Saving LoRA weights to {LORA_WEIGHTS_PATH}...")
             model.save_pretrained(LORA_WEIGHTS_PATH)
+            # Stamp trained rows so they aren't reused in the next run
+            try:
+                import psycopg2
+                conn_s = psycopg2.connect(POSTGRES_URI)
+                cur_s = conn_s.cursor()
+                cur_s.execute(
+                    "UPDATE search_results SET trained_at = NOW() WHERE result_id::text = ANY(%s)",
+                    (_LAST_FETCH_IDS,),
+                )
+                conn_s.commit()
+                log.info(f"Stamped trained_at on {cur_s.rowcount} rows")
+                cur_s.close(); conn_s.close()
+            except Exception as e:
+                log.warning(f"Failed to stamp trained_at: {e}")
             mlflow.log_artifact(LORA_WEIGHTS_PATH, artifact_path="qwen_lora_weights")
             log.info(f"Model saved to MLflow run {run.info.run_id}")
 

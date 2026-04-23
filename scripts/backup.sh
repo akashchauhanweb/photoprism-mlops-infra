@@ -140,15 +140,14 @@ backup_postgres() {
     local pod
     pod=$(kubectl -n "$ns" get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
     [[ -n "$pod" ]] || { warn "no postgres pod; skipping"; return 1; }
-    local user db
+    local user
     user=$(kubectl -n "$ns" get secret postgres-credentials -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
-    db=$(kubectl -n "$ns" get secret postgres-credentials -o jsonpath='{.data.POSTGRES_DB}' | base64 -d)
-    [[ -n "$user" && -n "$db" ]] || { warn "postgres creds missing; skipping"; return 1; }
+    [[ -n "$user" ]] || { warn "postgres creds missing; skipping"; return 1; }
     local out="$WORKDIR/postgres.sql.gz"
-    log "  dumping db=$db from pod $pod..."
-    kubectl -n "$ns" exec "$pod" -- sh -c "pg_dump --clean --if-exists -U '$user' '$db'" \
+    log "  pg_dumpall (all DBs: photoprism_mlops, mlflow, ...) from pod $pod..."
+    kubectl -n "$ns" exec "$pod" -- sh -c "pg_dumpall --clean --if-exists -U '$user'" \
         | gzip > "$out" \
-        || { warn "pg_dump FAILED"; return 1; }
+        || { warn "pg_dumpall FAILED"; return 1; }
     log "  size: $(du -h "$out" | cut -f1)"
     s3_upload "$out" postgres sql.gz
 }

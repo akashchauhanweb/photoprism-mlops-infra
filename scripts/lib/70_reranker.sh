@@ -6,8 +6,8 @@ if [[ -z "${RERANKER_IP:-}" ]]; then
     return 0
 fi
 
-readonly SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
-readonly DESIRED_IMAGE="${DOCKER_HUB_USER}/reranker-api:${RERANKER_API_TAG}"
+SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
+DESIRED_IMAGE="${DOCKER_HUB_USER}/reranker-api:${RERANKER_API_TAG}"
 
 log "fetching INTERNAL_TOKEN from cluster..."
 TOKEN=$(kubectl -n photoprism-platform get secret internal-token \

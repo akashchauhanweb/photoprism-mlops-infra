@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
       - name: search-api
-        image: akashweb/search-api:0.3.2
+        image: akashweb/search-api:0.3.3
         ports: [{ containerPort: 8010 }]
         envFrom:
         - secretRef: { name: search-api-secrets }
@@ -32,7 +32,6 @@ spec:
         - secretRef: { name: objectstore-credentials }
         env:
         - { name: RERANKER_ENABLED,  value: "true" }
-        - { name: RETRAIN_URL,       value: "http://192.5.87.42:8002" }
         - { name: RETRAIN_THRESHOLD, value: "10" }
         readinessProbe:
           httpGet: { path: /ready, port: 8010 }

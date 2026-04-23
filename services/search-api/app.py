@@ -224,7 +224,7 @@ async def _click_and_maybe_retrain(body: ClickIn):
     log.info(f"[click] RETRAIN_URL={RETRAIN_URL} threshold={RETRAIN_THRESHOLD}")
     try:
         with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM search_results")
+            cur.execute("SELECT COUNT(*) FROM search_results WHERE trained_at IS NULL")
             total = cur.fetchone()[0]
     except Exception as e:
         log.error(f"[click] row count query failed: {e}")
@@ -248,3 +248,26 @@ async def record_click(body: ClickIn, background_tasks: BackgroundTasks):
     log.info(f"[click] received query_id={body.query_id} image_id={body.image_id}")
     background_tasks.add_task(_click_and_maybe_retrain, body)
     return {"ok": True}
+
+@app.get("/retrain-state")
+async def retrain_state():
+    """Proxy feedback-trainer /training/status so browser can poll same-origin."""
+    out = {"threshold": RETRAIN_THRESHOLD}
+    try:
+        with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM search_results WHERE trained_at IS NULL")
+            out["untrained_count"] = cur.fetchone()[0]
+    except Exception as e:
+        out["untrained_count"] = None
+        out["count_error"] = str(e)
+
+    if not RETRAIN_URL:
+        out["trainer"] = {"error": "RETRAIN_URL not set"}
+        return out
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{RETRAIN_URL}/training/status")
+            out["trainer"] = r.json()
+    except Exception as e:
+        out["trainer"] = {"error": str(e)}
+    return out

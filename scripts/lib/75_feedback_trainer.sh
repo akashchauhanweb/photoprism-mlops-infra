@@ -7,8 +7,8 @@ if [[ -z "${RERANKER_IP:-}" ]]; then
     return 0
 fi
 
-readonly SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
-readonly DESIRED_IMAGE="${DOCKER_HUB_USER}/feedback-trainer:${FEEDBACK_TRAINER_TAG}"
+SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
+DESIRED_IMAGE="${DOCKER_HUB_USER}/feedback-trainer:${FEEDBACK_TRAINER_TAG}"
 
 log "fetching postgres credentials from cluster..."
 PG_USER=$(kubectl -n photoprism-platform get secret postgres-credentials \
@@ -22,12 +22,31 @@ PG_DB=$(kubectl -n photoprism-platform get secret postgres-credentials \
 
 # Connect via node1 private IP + NodePort (30532) — reachable from GPU VM's
 # floating interface since we opened allow-30532 SG on the sharednet port.
-readonly PG_HOST="${NODE1_FLOATING_IP}"
-readonly POSTGRES_URI="postgresql://${PG_USER}:${PG_PASS}@${PG_HOST}:30532/${PG_DB}"
-readonly QDRANT_URL="http://${NODE1_FLOATING_IP}:30633"
+PG_HOST="${NODE1_FLOATING_IP}"
+POSTGRES_URI="postgresql://${PG_USER}:${PG_PASS}@${PG_HOST}:30532/${PG_DB}"
+QDRANT_URL="http://${NODE1_FLOATING_IP}:30633"
 
 # MLflow: running on her GPU VM at :8000 (not deployed in our cluster).
-readonly MLFLOW_TRACKING_URI="http://${RERANKER_IP}:8000"
+MLFLOW_TRACKING_URI="http://${NODE1_FLOATING_IP}:30500"
+
+log "syncing reranker-api + scripts/ to GPU VM for rebuild path..."
+rsync -az -e "ssh -o BatchMode=yes -i $RERANKER_SSH_KEY" \
+    "$REPO_ROOT/services/reranker-api/" "$RERANKER_SSH_USER@$RERANKER_IP:/tmp/reranker-api/" \
+    || warn "  reranker-api rsync failed (rebuild flow will be broken)"
+rsync -az -e "ssh -o BatchMode=yes -i $RERANKER_SSH_KEY" \
+    "$REPO_ROOT/scripts/" "$RERANKER_SSH_USER@$RERANKER_IP:/tmp/photoprism-scripts/" \
+    || warn "  scripts rsync failed"
+
+log "loading docker hub PAT from cluster secret..."
+DOCKER_HUB_PAT=$(kubectl -n photoprism-platform get secret dockerhub-secret \
+    -o jsonpath='{.data.DOCKER_HUB_PAT}' 2>/dev/null | base64 -d)
+
+log "loading S3 creds from objectstore-credentials secret..."
+S3_BUCKET=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_BUCKET}' | base64 -d)
+S3_ENDPOINT=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_ENDPOINT}' | base64 -d)
+S3_ACCESS_KEY=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_ACCESS_KEY}' | base64 -d)
+S3_SECRET_KEY=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_SECRET_KEY}' | base64 -d)
+S3_REGION=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_REGION}' | base64 -d)
 
 log "checking feedback-trainer container on $RERANKER_IP..."
 current=$($SSH "docker inspect feedback-trainer --format '{{.Config.Image}}' 2>/dev/null || echo none")
@@ -41,9 +60,23 @@ else
     $SSH "docker pull $DESIRED_IMAGE"
     $SSH "docker run -d --name feedback-trainer --gpus all --restart unless-stopped \
           -p 8002:8001 \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v /tmp/reranker-api:/reranker-api \
+          -v /tmp/photoprism-scripts:/scripts \
+          -e DOCKER_HUB_PAT='$DOCKER_HUB_PAT' \
           -e POSTGRES_URI='$POSTGRES_URI' \
           -e QDRANT_URL='$QDRANT_URL' \
           -e MLFLOW_TRACKING_URI='$MLFLOW_TRACKING_URI' \
+          -e MIN_FEEDBACK_SAMPLES='${MIN_FEEDBACK_SAMPLES:-10}' \
+          -e S3_BUCKET='$S3_BUCKET' \
+          -e S3_ENDPOINT='$S3_ENDPOINT' \
+          -e S3_ACCESS_KEY='$S3_ACCESS_KEY' \
+          -e S3_SECRET_KEY='$S3_SECRET_KEY' \
+          -e S3_REGION='$S3_REGION' \
+          -e MLFLOW_S3_ENDPOINT_URL='$S3_ENDPOINT' \
+          -e AWS_ACCESS_KEY_ID='$S3_ACCESS_KEY' \
+          -e AWS_SECRET_ACCESS_KEY='$S3_SECRET_KEY' \
+          -e AWS_DEFAULT_REGION='$S3_REGION' \
           -e DOCKER_HUB_USER='$DOCKER_HUB_USER' \
           $DESIRED_IMAGE"
     log "  waiting for feedback-trainer startup (30s)..."

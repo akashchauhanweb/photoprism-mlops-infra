@@ -37,7 +37,7 @@ Options:
 
 Available modules:
   00_prereqs   10_security_groups   20_sealed_secrets
-  25_restore_volumes 30_databases   35_restore_data
+  25_restore_volumes 30_databases   32_mlflow   35_restore_data
   40_services 50_photoprism          60_network_policies
   70_reranker 75_feedback_trainer   80_grafana   85_dashboard   99_smoke
 EOF
@@ -58,6 +58,7 @@ source "$REPO_ROOT/scripts/config.env"
 export OS_CLOUD RERANKER_IP RERANKER_SSH_USER RERANKER_SSH_KEY
 export DOCKER_HUB_USER SEALED_SECRETS_KEY_BACKUP
 export PHOTOPRISM_INGEST_TAG INGEST_API_TAG CLIP_API_TAG
+export RETRAIN_THRESHOLD MIN_FEEDBACK_SAMPLES
 export SEARCH_API_TAG FEATURE_WORKER_TAG RERANKER_API_TAG
 
 # Derive node1 floating IP at runtime
@@ -70,7 +71,7 @@ log "node1 floating IP: ${NODE1_FLOATING_IP:-unknown}"
 
 # ---- Module list ----
 readonly ALL_STEPS=(00_prereqs 10_security_groups 20_sealed_secrets
-                    25_restore_volumes 30_databases 35_restore_data
+                    25_restore_volumes 30_databases 32_mlflow 35_restore_data
                     40_services 50_photoprism
                     60_network_policies 70_reranker 75_feedback_trainer 80_grafana 85_dashboard 99_smoke)
 
@@ -107,6 +108,7 @@ log "PhotoPrism   : http://${NODE1_FLOATING_IP}:30234"
 log "               user: admin  pass: photoprism-admin"
 log "Search API   : http://${NODE1_FLOATING_IP}:30810/search"
 log "Qdrant       : http://${NODE1_FLOATING_IP}:30633/dashboard/"
+log "MLflow       : http://${NODE1_FLOATING_IP}:30500"
 log "Reranker API : http://${RERANKER_IP}:8000 (internal only)"
 log "Feedback API : http://${RERANKER_IP}:8002/health (internal only)"
 log ""
