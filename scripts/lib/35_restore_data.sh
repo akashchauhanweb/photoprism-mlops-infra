@@ -68,7 +68,13 @@ restore_qdrant() {
     log "  [qdrant] port-forwarding and uploading snapshot..."
     kubectl -n "$ns" port-forward "$pod" 16333:6333 >/dev/null 2>&1 &
     local pf_pid=$!
-    sleep 2
+
+    for i in {1..30}; do
+        if curl -sS --max-time 2 http://localhost:16333/ >/dev/null 2>&1; then
+            break
+        fi
+        sleep 2
+    done
 
     # Use /snapshots/upload (multipart) — supports direct snapshot file upload
     local resp
@@ -106,6 +112,14 @@ restore_mariadb() {
     log "  [mariadb] waiting for pod Ready..."
     kubectl -n "$ns" wait --for=condition=Ready pod/"$pod" --timeout=3m \
         || { warn "  [mariadb] pod not ready"; return 1; }
+
+    log "  [mariadb] waiting for mysqld socket..."
+    for i in {1..30}; do
+        if kubectl -n "$ns" exec "$pod" -- sh -c "mariadb -u photoprism -p'$pass' -e 'SELECT 1' >/dev/null 2>&1"; then
+            break
+        fi
+        sleep 2
+    done
 
     log "  [mariadb] loading dump into db=photoprism..."
     if gunzip -c "$dump" | kubectl -n "$ns" exec -i "$pod" -- \
