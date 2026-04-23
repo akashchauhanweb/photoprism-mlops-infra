@@ -9,9 +9,10 @@ log "fetching Grafana admin password..."
 PASS=$(kubectl -n monitoring get secret loki-stack-grafana \
        -o jsonpath='{.data.admin-password}' | base64 -d)
 [[ -n "$PASS" ]] || die "could not get Grafana admin password"
+PASS_ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote_plus(sys.argv[1]))' "$PASS")
 
 log "discovering Loki datasource UID..."
-DS_UID=$(curl -sS "http://admin:${PASS}@${GRAFANA_URL#http://}/api/datasources" \
+DS_UID=$(curl -sS "http://admin:${PASS_ENC}@${GRAFANA_URL#http://}/api/datasources" \
          | jq -r '.[] | select(.type=="loki") | .uid' | head -1)
 [[ -n "$DS_UID" ]] || die "no Loki datasource found in Grafana"
 log "  Loki UID: $DS_UID"
@@ -22,7 +23,7 @@ patched=$(jq --arg uid "$DS_UID" '
     | .id = null
 ' "$DASH_FILE")
 
-curl -sS -X POST "http://admin:${PASS}@${GRAFANA_URL#http://}/api/dashboards/db" \
+curl -sS -X POST "http://admin:${PASS_ENC}@${GRAFANA_URL#http://}/api/dashboards/db" \
     -H "Content-Type: application/json" \
     -d "$(jq -n --argjson d "$patched" '{dashboard: $d, overwrite: true}')" \
     | jq -r '. | "  " + .status + ": " + .url' || warn "dashboard import unclear"

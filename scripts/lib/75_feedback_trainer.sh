@@ -23,7 +23,9 @@ PG_DB=$(kubectl -n photoprism-platform get secret postgres-credentials \
 # Connect via node1 private IP + NodePort (30532) — reachable from GPU VM's
 # floating interface since we opened allow-30532 SG on the sharednet port.
 PG_HOST="${NODE1_FLOATING_IP}"
-POSTGRES_URI="postgresql://${PG_USER}:${PG_PASS}@${PG_HOST}:30532/${PG_DB}"
+PG_USER_ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote_plus(sys.argv[1]))' "$PG_USER")
+PG_PASS_ENC=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote_plus(sys.argv[1]))' "$PG_PASS")
+POSTGRES_URI="postgresql://${PG_USER_ENC}:${PG_PASS_ENC}@${PG_HOST}:30532/${PG_DB}"
 QDRANT_URL="http://${NODE1_FLOATING_IP}:30633"
 
 # MLflow: running on her GPU VM at :8000 (not deployed in our cluster).
