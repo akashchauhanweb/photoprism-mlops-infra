@@ -28,17 +28,23 @@ for sg_name in "${!SG_RULES[@]}"; do
 done
 
 log "attaching SGs to node1 port..."
-# Find the port that owns the floating IP
-port_id=$(openstack --os-cloud "$OS_CLOUD" port list --fixed-ip ip-address=192.168.1.11 \
-    -f value -c ID | head -1)
-if [[ -n "$port_id" ]]; then
-    for sg_name in "${!SG_RULES[@]}"; do
-        openstack --os-cloud "$OS_CLOUD" port set "$port_id" \
-            --security-group "$sg_name" >/dev/null 2>&1 || true
-    done
-    log "  attached ${#SG_RULES[@]} SGs to node1 port"
+# Derive node1's private IP from the control-plane node at runtime (not hardcoded)
+NODE1_PRIVATE_IP=$(kubectl get node -l 'node-role.kubernetes.io/control-plane' \
+    -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+if [[ -z "$NODE1_PRIVATE_IP" ]]; then
+    warn "could not derive node1 private IP from kubectl — SGs created but not attached"
 else
-    warn "could not find node1 port (192.168.1.11) — SGs created but not attached"
+    port_id=$(openstack --os-cloud "$OS_CLOUD" port list \
+        --fixed-ip ip-address="$NODE1_PRIVATE_IP" -f value -c ID | head -1)
+    if [[ -n "$port_id" ]]; then
+        for sg_name in "${!SG_RULES[@]}"; do
+            openstack --os-cloud "$OS_CLOUD" port set "$port_id" \
+                --security-group "$sg_name" >/dev/null 2>&1 || true
+        done
+        log "  attached ${#SG_RULES[@]} SGs to node1 port ($NODE1_PRIVATE_IP)"
+    else
+        warn "could not find node1 port ($NODE1_PRIVATE_IP) — SGs created but not attached"
+    fi
 fi
 
 log "security groups OK"
