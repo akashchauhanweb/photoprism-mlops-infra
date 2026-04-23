@@ -13,8 +13,8 @@ rclone_ensure
 ensure_secret_in_production() {
     if ! kubectl -n photoprism-production get secret objectstore-credentials >/dev/null 2>&1; then
         log "  copying objectstore-credentials into photoprism-production..."
-        kubectl -n photoprism-platform get secret objectstore-credentials -o yaml \
-            | sed 's/namespace: photoprism-platform/namespace: photoprism-production/' \
+        kubectl -n photoprism-platform get secret objectstore-credentials -o json \
+            | jq 'del(.metadata.ownerReferences, .metadata.resourceVersion, .metadata.uid, .metadata.creationTimestamp) | .metadata.namespace="photoprism-production"' \
             | kubectl apply -f -
     fi
 }

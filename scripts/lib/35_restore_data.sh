@@ -1,5 +1,4 @@
 # 35_restore_data.sh — restore DB dumps (qdrant, postgres) after 30_databases.
-# mariadb intentionally SKIPPED (placeholder-only per user decision).
 # First run: no backup on S3 → skip. Subsequent run: download latest and load.
 
 # shellcheck disable=SC1091
@@ -66,27 +65,59 @@ restore_qdrant() {
     kubectl -n "$ns" wait --for=condition=Ready pod/"$pod" --timeout=3m \
         || { warn "  [qdrant] pod not ready"; return 1; }
 
-    log "  [qdrant] copying snapshot into pod..."
-    kubectl -n "$ns" cp "$snap" "$pod:/tmp/restore.snapshot" \
-        || { warn "  [qdrant] cp into pod FAILED"; return 1; }
+    log "  [qdrant] port-forwarding and uploading snapshot..."
+    kubectl -n "$ns" port-forward "$pod" 16333:6333 >/dev/null 2>&1 &
+    local pf_pid=$!
+    sleep 2
 
-    log "  [qdrant] uploading snapshot to collection=$coll..."
-    # Qdrant v1 accepts PUT /collections/<coll>/snapshots/upload (multipart) OR
-    # PUT /collections/<coll>/snapshots/recover with {"location":"file:///..."}
-    if kubectl -n "$ns" exec "$pod" -- sh -c \
-        "wget -qO- --method=PUT --header='Content-Type: application/json' \
-         --body-data='{\"location\":\"file:///tmp/restore.snapshot\"}' \
-         http://localhost:6333/collections/${coll}/snapshots/recover" \
-         | grep -q '"status":"ok"'; then
+    # Use /snapshots/upload (multipart) — supports direct snapshot file upload
+    local resp
+    resp=$(curl -sS -X POST \
+        -F "snapshot=@${snap}" \
+        "http://localhost:16333/collections/${coll}/snapshots/upload?priority=snapshot")
+    kill $pf_pid 2>/dev/null
+
+    if echo "$resp" | grep -q '"status":"ok"'; then
         log "  [qdrant] restore OK"
     else
-        warn "  [qdrant] recover FAILED"
+        warn "  [qdrant] recover FAILED: $resp"
     fi
-    kubectl -n "$ns" exec "$pod" -- rm -f /tmp/restore.snapshot >/dev/null 2>&1 || true
+}
+
+# ---- mariadb ----
+restore_mariadb() {
+    local comp=mariadb
+    if ! s3_has_latest "$comp" "latest.sql.gz"; then
+        log "  [mariadb] no backup on S3 — skipping (first run)"
+        return 0
+    fi
+    local ns=photoprism-production
+    local pod
+    pod=$(kubectl -n "$ns" get pod -l app=mariadb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    [[ -n "$pod" ]] || { warn "  [mariadb] no pod found; skipping"; return 1; }
+    local pass
+    pass=$(kubectl -n "$ns" get secret photoprism-secrets -o jsonpath='{.data.mariadb-password}' | base64 -d)
+    local dump="$WORKDIR/mariadb.sql.gz"
+
+    log "  [mariadb] downloading latest.sql.gz..."
+    "$rclone_bin" copyto "$(s3_path $comp)/latest.sql.gz" "$dump" \
+        || { warn "  [mariadb] download FAILED"; return 1; }
+
+    log "  [mariadb] waiting for pod Ready..."
+    kubectl -n "$ns" wait --for=condition=Ready pod/"$pod" --timeout=3m \
+        || { warn "  [mariadb] pod not ready"; return 1; }
+
+    log "  [mariadb] loading dump into db=photoprism..."
+    if gunzip -c "$dump" | kubectl -n "$ns" exec -i "$pod" -- \
+        sh -c "mariadb -u photoprism -p'$pass' photoprism" >/dev/null; then
+        log "  [mariadb] restore OK"
+    else
+        warn "  [mariadb] mariadb load FAILED"
+    fi
 }
 
 log "=== data restore (post-DB) ==="
-log "  (mariadb skipped by design — placeholder only)"
+restore_mariadb
 restore_postgres
 restore_qdrant
 

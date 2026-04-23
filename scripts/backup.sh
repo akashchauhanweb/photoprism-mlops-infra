@@ -146,7 +146,7 @@ backup_postgres() {
     [[ -n "$user" && -n "$db" ]] || { warn "postgres creds missing; skipping"; return 1; }
     local out="$WORKDIR/postgres.sql.gz"
     log "  dumping db=$db from pod $pod..."
-    kubectl -n "$ns" exec "$pod" -- sh -c "pg_dump -U '$user' '$db'" \
+    kubectl -n "$ns" exec "$pod" -- sh -c "pg_dump --clean --if-exists -U '$user' '$db'" \
         | gzip > "$out" \
         || { warn "pg_dump FAILED"; return 1; }
     log "  size: $(du -h "$out" | cut -f1)"
