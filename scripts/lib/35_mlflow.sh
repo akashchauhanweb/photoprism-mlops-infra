@@ -1,5 +1,7 @@
-# 32_mlflow.sh — MLflow tracking server.
-# Backend: postgres (mlflow DB, created by init.sql).
+# 35_mlflow.sh — MLflow tracking server.
+# Runs AFTER 32_restore_data so MLflow connects to a fully-restored mlflow DB
+# (either from init.sql on a first run, or from the S3 pg_dumpall on a restore).
+# Backend: postgres (mlflow DB, created by init.sql or restored from backup).
 # Artifacts: S3 (mlflow/ prefix in objectstore bucket).
 
 log "ensuring mlflow database exists in postgres..."

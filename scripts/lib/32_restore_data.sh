@@ -1,4 +1,6 @@
-# 35_restore_data.sh — restore DB dumps (qdrant, postgres) after 30_databases.
+# 32_restore_data.sh — restore DB dumps (mariadb, postgres, qdrant) after 30_databases.
+# Runs BEFORE 35_mlflow so that pg_dumpall --clean can drop the mlflow DB
+# without an active MLflow connection blocking it.
 # First run: no backup on S3 → skip. Subsequent run: download latest and load.
 
 # shellcheck disable=SC1091
