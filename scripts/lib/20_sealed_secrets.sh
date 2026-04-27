@@ -82,9 +82,7 @@ for ns in photoprism-platform photoprism-production; do
 done
 
 if (( failed > 0 )); then
-    die "sealed-secrets validation failed: $failed SealedSecret(s) did not decrypt. \
-Likely cause: the backup key at \$SEALED_SECRETS_KEY_BACKUP doesn'"'"'t match the one \
-used to encrypt the committed YAMLs. Re-seal the secrets or restore the correct key."
+    die "sealed-secrets validation failed: $failed SealedSecret(s) did not decrypt. Likely cause: the backup key at \$SEALED_SECRETS_KEY_BACKUP does not match the one used to encrypt the committed YAMLs. Re-seal the secrets or restore the correct key."
 fi
 
 log "sealed secrets OK"
