@@ -5,9 +5,6 @@ config:
   snippets:
     pipelineStages:
       - cri: {}
-      - match:
-          selector: '{namespace=~"photoprism-platform|photoprism-production|monitoring|kube-system"}'
-          stages: []
 resources:
   requests: { cpu: 50m,  memory: 64Mi  }
   limits:   { cpu: 200m, memory: 256Mi }
