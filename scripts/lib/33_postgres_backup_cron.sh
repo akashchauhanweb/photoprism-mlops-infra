@@ -24,17 +24,4 @@ log "verifying CronJob..."
 kubectl -n photoprism-platform get cronjob pg-backup >/dev/null \
     || die "pg-backup CronJob not found after apply"
 
-log "triggering an immediate baseline backup (so a per-DB dump exists in S3 before any teardown)..."
-JOB_NAME="pg-backup-baseline-$(date +%s)"
-if kubectl -n photoprism-platform create job --from=cronjob/pg-backup "$JOB_NAME" >/dev/null 2>&1; then
-    if kubectl -n photoprism-platform wait --for=condition=Complete \
-        "job/$JOB_NAME" --timeout=180s >/dev/null 2>&1; then
-        log "  baseline backup OK"
-    else
-        warn "  baseline backup did not complete in 3m — continuing"
-    fi
-else
-    warn "  could not start baseline backup job — CronJob will run on schedule"
-fi
-
 log "pg-backup CronJob OK"
