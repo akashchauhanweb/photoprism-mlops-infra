@@ -275,9 +275,12 @@ def _docker_build_push(image: str, tag: str, src_dir: str):
     if result.returncode != 0:
         raise RuntimeError(f"docker login failed: {result.stderr}")
     full_tag = f"{image}:{tag}"
+    latest_tag = f"{image}:latest"
     subprocess.run(["docker", "build", "--network", "host", "-t", full_tag, src_dir], check=True)
+    subprocess.run(["docker", "tag", full_tag, latest_tag], check=True)
     subprocess.run(["docker", "push", full_tag], check=True)
-    log.info(f"Pushed {full_tag}")
+    subprocess.run(["docker", "push", latest_tag], check=True)
+    log.info(f"Pushed {full_tag} and {latest_tag}")
 
 
 def _redeploy_via_script():

@@ -1,5 +1,5 @@
-# 70_reranker.sh — ensure reranker-api container is running on GPU VM.
-# Idempotent: skip if correct image is already running.
+# 70_reranker.sh — ensure reranker-api container is running on GPU VM with the
+# latest published image. Always pulls; redeploys if remote digest changed.
 
 if [[ -z "${RERANKER_IP:-}" ]]; then
     warn "RERANKER_IP empty — skipping reranker deployment"
@@ -7,23 +7,28 @@ if [[ -z "${RERANKER_IP:-}" ]]; then
 fi
 
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
-DESIRED_IMAGE="${DOCKER_HUB_USER}/reranker-api:${RERANKER_API_TAG}"
+IMAGE="${DOCKER_HUB_USER}/reranker-api"
+DESIRED_IMAGE="${IMAGE}:latest"
 
 log "fetching INTERNAL_TOKEN from cluster..."
 TOKEN=$(kubectl -n photoprism-platform get secret internal-token \
     -o jsonpath='{.data.INTERNAL_TOKEN}' | base64 -d)
 [[ -n "$TOKEN" ]] || die "could not read INTERNAL_TOKEN from cluster"
 
-log "checking reranker container on $RERANKER_IP..."
-current=$($SSH "docker inspect reranker-api --format '{{.Config.Image}}' 2>/dev/null || echo none")
+log "pulling $DESIRED_IMAGE on GPU VM..."
+$SSH "docker pull $DESIRED_IMAGE" >/dev/null \
+    || die "docker pull failed (Docker Hub unreachable, or image not pushed yet)"
+
+# Compare the digest of the running container's image vs the freshly pulled one.
+running_id=$($SSH "docker inspect reranker-api --format '{{.Image}}' 2>/dev/null || echo none")
+latest_id=$($SSH "docker image inspect $DESIRED_IMAGE --format '{{.Id}}' 2>/dev/null || echo none")
 status=$($SSH "docker inspect reranker-api --format '{{.State.Status}}' 2>/dev/null || echo none")
 
-if [[ "$current" == "$DESIRED_IMAGE" && "$status" == "running" ]]; then
-    log "  already running with image $DESIRED_IMAGE — skipping"
+if [[ "$running_id" == "$latest_id" && "$status" == "running" ]]; then
+    log "  already running with the latest digest ($latest_id) — skipping"
 else
-    log "  (re)deploying: current='$current' status='$status' desired='$DESIRED_IMAGE'"
+    log "  redeploying: running_id='$running_id' status='$status' latest_id='$latest_id'"
     $SSH "docker stop reranker-api 2>/dev/null; docker rm reranker-api 2>/dev/null; true"
-    $SSH "docker pull $DESIRED_IMAGE"
     $SSH "docker run -d --name reranker-api --gpus all --restart unless-stopped \
           -p 8000:8000 -e INTERNAL_TOKEN='$TOKEN' $DESIRED_IMAGE"
     log "  waiting for reranker to become healthy (up to 180s)..."
@@ -39,7 +44,7 @@ while (( SECONDS < deadline )); do
     sleep 3
 done
 if (( healthy == 1 )); then
-    log "  reranker healthy (after $((SECONDS - (deadline - 180)))s)"
+    log "  reranker healthy"
 else
     warn "  reranker did not respond within 180s — check 'docker logs reranker-api' on $RERANKER_IP"
 fi

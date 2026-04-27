@@ -8,7 +8,8 @@ if [[ -z "${RERANKER_IP:-}" ]]; then
 fi
 
 SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERANKER_SSH_USER@$RERANKER_IP"
-DESIRED_IMAGE="${DOCKER_HUB_USER}/feedback-trainer:${FEEDBACK_TRAINER_TAG}"
+IMAGE="${DOCKER_HUB_USER}/feedback-trainer"
+DESIRED_IMAGE="${IMAGE}:latest"
 
 log "fetching postgres credentials from cluster..."
 PG_USER=$(kubectl -n photoprism-platform get secret postgres-credentials \
@@ -51,15 +52,18 @@ S3_SECRET_KEY=$(kubectl -n photoprism-platform get secret objectstore-credential
 S3_REGION=$(kubectl -n photoprism-platform get secret objectstore-credentials -o jsonpath='{.data.S3_REGION}' | base64 -d)
 
 log "checking feedback-trainer container on $RERANKER_IP..."
-current=$($SSH "docker inspect feedback-trainer --format '{{.Config.Image}}' 2>/dev/null || echo none")
+$SSH "docker pull $DESIRED_IMAGE" >/dev/null \
+    || die "docker pull failed (Docker Hub unreachable, or image not pushed yet)"
+
+running_id=$($SSH "docker inspect feedback-trainer --format '{{.Image}}' 2>/dev/null || echo none")
+latest_id=$($SSH "docker image inspect $DESIRED_IMAGE --format '{{.Id}}' 2>/dev/null || echo none")
 status=$($SSH "docker inspect feedback-trainer --format '{{.State.Status}}' 2>/dev/null || echo none")
 
-if [[ "$current" == "$DESIRED_IMAGE" && "$status" == "running" ]]; then
-    log "  already running with image $DESIRED_IMAGE — skipping"
+if [[ "$running_id" == "$latest_id" && "$status" == "running" ]]; then
+    log "  already running with the latest digest ($latest_id) — skipping"
 else
-    log "  (re)deploying: current='$current' status='$status' desired='$DESIRED_IMAGE'"
+    log "  redeploying: running_id='$running_id' status='$status' latest_id='$latest_id'"
     $SSH "docker stop feedback-trainer 2>/dev/null; docker rm feedback-trainer 2>/dev/null; true"
-    $SSH "docker pull $DESIRED_IMAGE"
     $SSH "docker run -d --name feedback-trainer --gpus all --restart unless-stopped \
           -p 8002:8001 \
           -v /var/run/docker.sock:/var/run/docker.sock \
