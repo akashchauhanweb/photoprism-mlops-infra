@@ -50,4 +50,14 @@ for db in photoprism_mlops mlflow; do
     fi
 done
 
+# Apply init.sql against photoprism_mlops every run (it's idempotent — uses
+# CREATE TABLE IF NOT EXISTS / CREATE EXTENSION IF NOT EXISTS). Postgres only
+# auto-runs /docker-entrypoint-initdb.d/ on a virgin PGDATA, so we cannot
+# rely on that path on any restart with a preserved volume.
+log "  applying init.sql to photoprism_mlops (idempotent)..."
+kubectl -n photoprism-platform exec -i postgres-0 -- \
+    psql -U "$PG_USER" -d photoprism_mlops -v ON_ERROR_STOP=1 -q \
+    < "$REPO_ROOT/docker/data_docker_files/postgres/init.sql" >/dev/null \
+    || warn "  init.sql apply had errors (non-fatal)"
+
 log "databases OK"
