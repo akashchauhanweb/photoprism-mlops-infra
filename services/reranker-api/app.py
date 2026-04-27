@@ -1,9 +1,10 @@
 import logging
 import os
 import time as _t
-from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import List
+from io import BytesIO
+from typing import List, Optional
 
 import requests
 import torch
@@ -23,6 +24,9 @@ log = logging.getLogger("reranker-api")
 MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2-VL-2B-Instruct")
 LORA_PATH = os.environ.get("LORA_PATH", "/app/qwen_lora_weights")
 INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
+# Optional default cap if caller omits top_k. Caller (search-api) is
+# expected to pass top_k explicitly; this is a safety net.
+DEFAULT_TOP_K = int(os.environ.get("RERANKER_DEFAULT_TOP_K", "10"))
 
 state: dict = {}
 
@@ -43,7 +47,7 @@ IMAGE_LOAD_FAIL = ml_counter(
 )
 DOCS_PER_REQUEST = ml_histogram(
     "pp_reranker_documents_per_request",
-    "Number of documents per /rerank call",
+    "Number of documents per /rerank call (after top_k cap)",
     buckets=(1, 2, 5, 10, 20, 50),
 )
 SCORE_DIST = ml_histogram(
@@ -59,18 +63,20 @@ MODEL_LOADED = ml_gauge(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+    from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
     from peft import PeftModel
 
-    log.info(f"loading base {MODEL_NAME}")
+    log.info(f"loading base {MODEL_NAME} (int8)")
+    bnb = BitsAndBytesConfig(load_in_8bit=True)
     base = Qwen2VLForConditionalGeneration.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.bfloat16, device_map="auto"
+        MODEL_NAME, quantization_config=bnb, device_map="auto"
     )
     log.info(f"applying lora {LORA_PATH}")
     model = PeftModel.from_pretrained(base, LORA_PATH)
     model.eval()
+    # Smaller pixel budget — fewer vision tokens per image, faster inference.
     processor = AutoProcessor.from_pretrained(
-        MODEL_NAME, min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28
+        MODEL_NAME, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28
     )
     state["model"] = model
     state["processor"] = processor
@@ -99,6 +105,8 @@ class RerankIn(BaseModel):
     documents: List[dict]
     instruction: str = "Retrieve images relevant to the user's query."
     fps: float = 1.0
+    # Caller controls how many to score. If omitted, falls back to env default.
+    top_k: Optional[int] = None
 
 
 class RerankOut(BaseModel):
@@ -125,27 +133,43 @@ def rerank(body: RerankIn):
     if not query_text:
         raise HTTPException(400, "query.text required")
 
-    DOCS_PER_REQUEST.observe(len(body.documents))
+    # Determine effective top-K: caller > default.
+    effective_k = body.top_k if (body.top_k and body.top_k > 0) else DEFAULT_TOP_K
+    documents = body.documents[:effective_k]
+    if len(body.documents) > effective_k:
+        log.info(f"truncating {len(body.documents)} docs to top_k={effective_k}")
+
+    DOCS_PER_REQUEST.observe(len(documents))
     total_start = _t.perf_counter()
 
     model = state["model"]
     processor = state["processor"]
     device = next(model.parameters()).device
 
-    raw_scores = []
-    images_out = []
+    # ---- Parallel image fetch (pure I/O — overlaps S3 round-trips) ----
+    def _fetch(doc):
+        image_ref = doc.get("image", "")
+        try:
+            if image_ref.startswith("http"):
+                resp = requests.get(image_ref, timeout=10)
+                resp.raise_for_status()
+                return image_ref, Image.open(BytesIO(resp.content)).convert("RGB"), None
+            return image_ref, Image.open(image_ref).convert("RGB"), None
+        except Exception as e:
+            log.warning(f"load fail {image_ref}: {e}")
+            return image_ref, None, e
+
+    if documents:
+        with ThreadPoolExecutor(max_workers=len(documents)) as pool:
+            fetched = list(pool.map(_fetch, documents))
+    else:
+        fetched = []
+
+    raw_scores: List[float] = []
+    images_out: List[str] = []
     with torch.no_grad():
-        for doc in body.documents:
-            image_ref = doc.get("image", "")
-            try:
-                if image_ref.startswith("http"):
-                    resp = requests.get(image_ref, timeout=10)
-                    resp.raise_for_status()
-                    image = Image.open(BytesIO(resp.content)).convert("RGB")
-                else:
-                    image = Image.open(image_ref).convert("RGB")
-            except Exception as e:
-                log.warning(f"load fail {image_ref}: {e}")
+        for image_ref, image, err in fetched:
+            if err is not None:
                 IMAGE_LOAD_FAIL.inc()
                 raw_scores.append(-999.0)
                 images_out.append(image_ref)
@@ -171,6 +195,7 @@ def rerank(body: RerankIn):
             raw_scores.append(raw)
             images_out.append(image_ref)
 
+    # Softmax across ALL candidates — proper probability distribution
     softmax_scores = torch.softmax(torch.tensor(raw_scores), dim=0).tolist()
 
     results = [
