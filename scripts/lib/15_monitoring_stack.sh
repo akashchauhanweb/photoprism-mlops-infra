@@ -78,7 +78,7 @@ helm upgrade --install "$PROMTAIL_RELEASE" grafana/promtail \
 
 # --- ServiceMonitors and Loki datasource provisioning are applied as plain manifests ---
 log "applying servicemonitors + datasource configmap..."
-kubectl apply -f "$REPO_ROOT/k8s/platform/monitoring/" >/dev/null
+kubectl apply -f "$REPO_ROOT/k8s/platform/monitoring/grafana-loki-datasource.yaml" -f "$REPO_ROOT/k8s/platform/monitoring/servicemonitors.yaml" >/dev/null
 
 # --- DCGM tunnel (GPU VM → in-cluster) ---
 # Wired via a Deployment that runs autossh + a Service so Prometheus can scrape it
