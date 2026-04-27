@@ -68,8 +68,13 @@ if ! docker info 2>/dev/null | grep -q 'Runtimes:.*nvidia'; then
     sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nvidia-container-toolkit
 
-    sudo nvidia-ctk runtime configure --runtime=docker
-    sudo systemctl restart docker
+    # Only reconfigure + restart docker if nvidia runtime isn't already wired in
+    if ! sudo grep -q '"nvidia"' /etc/docker/daemon.json 2>/dev/null; then
+        sudo nvidia-ctk runtime configure --runtime=docker
+        sudo systemctl restart docker
+    else
+        log "docker already configured for nvidia runtime — not restarting"
+    fi
 else
     log "nvidia-container-toolkit already configured"
 fi
