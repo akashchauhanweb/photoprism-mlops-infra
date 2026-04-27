@@ -32,7 +32,6 @@ env_auth = false
 access_key_id = $S3_ACCESS_KEY
 secret_access_key = $S3_SECRET_KEY
 endpoint = $S3_ENDPOINT
-region = ${S3_REGION:-}
 acl = private
 EOF
 
