@@ -20,6 +20,13 @@ loki:
     retention_period: 168h     # 7 days
     allow_structured_metadata: false
     volume_enabled: true
+  compactor:
+    working_directory: /var/loki/compactor
+    delete_request_store: filesystem
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+    compaction_interval: 10m
 
 singleBinary:
   replicas: 1
