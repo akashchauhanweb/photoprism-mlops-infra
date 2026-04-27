@@ -62,8 +62,16 @@ running_id=$($SSH "docker inspect feedback-trainer --format '{{.Image}}' 2>/dev/
 latest_id=$($SSH "docker image inspect $DESIRED_IMAGE --format '{{.Id}}' 2>/dev/null || echo none")
 status=$($SSH "docker inspect feedback-trainer --format '{{.State.Status}}' 2>/dev/null || echo none")
 
-if [[ "$running_id" == "$latest_id" && "$status" == "running" ]]; then
-    log "  already running with the latest digest ($latest_id) — skipping"
+# Detect IP drift: compare env vars in the running container against current node1 IP.
+running_pg_host=$($SSH "docker inspect feedback-trainer --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep -E '^POSTGRES_URI=' | sed -E 's|.*@([^:]+):.*|\\1|'" || true)
+ip_drift=0
+if [[ -n "$running_pg_host" && "$running_pg_host" != "$NODE1_FLOATING_IP" ]]; then
+    log "  IP drift detected: container has $running_pg_host, current node1=$NODE1_FLOATING_IP"
+    ip_drift=1
+fi
+
+if [[ "$running_id" == "$latest_id" && "$status" == "running" && "$ip_drift" == "0" ]]; then
+    log "  already running with the latest digest ($latest_id) and current IP — skipping"
 else
     log "  redeploying: running_id='$running_id' status='$status' latest_id='$latest_id'"
     $SSH "docker stop feedback-trainer 2>/dev/null; docker rm feedback-trainer 2>/dev/null; true"
