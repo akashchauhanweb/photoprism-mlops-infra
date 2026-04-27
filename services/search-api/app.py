@@ -193,7 +193,7 @@ async def search(body: SearchIn):
             async with httpx.AsyncClient(timeout=60) as client:
                 r = await client.post(
                     f"{RERANKER_URL}/rerank",
-                    json={"query": {"text": body.query}, "documents": docs, "top_k": RERANKER_TOP_K},
+                    json={"query": {"text": body.query}, "documents": docs},
                     headers={"X-Internal-Token": INTERNAL_TOKEN},
                 )
                 r.raise_for_status()
