@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     model = PeftModel.from_pretrained(base, LORA_PATH)
     model.eval()
     processor = AutoProcessor.from_pretrained(
-        MODEL_NAME, min_pixels=256 * 28 * 28, max_pixels=512 * 28 * 28
+        MODEL_NAME, min_pixels=128 * 28 * 28, max_pixels=256 * 28 * 28
     )
     state["model"] = model
     state["processor"] = processor
