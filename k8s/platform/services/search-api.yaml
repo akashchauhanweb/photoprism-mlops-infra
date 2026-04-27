@@ -8,8 +8,7 @@ spec:
   type: NodePort
   selector: { app: search-api }
   ports:
-  - { name: http,    port: 8010, targetPort: 8010, nodePort: 30810 }
-  - { name: metrics, port: 8010, targetPort: 8010 }
+  - { name: metrics, port: 8010, targetPort: 8010, nodePort: 30810 }
 ---
 apiVersion: apps/v1
 kind: Deployment

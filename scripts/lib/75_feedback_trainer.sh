@@ -37,6 +37,9 @@ rsync -az -e "ssh -o BatchMode=yes -i $RERANKER_SSH_KEY" \
     "$REPO_ROOT/services/reranker-api/" "$RERANKER_SSH_USER@$RERANKER_IP:/tmp/reranker-api/" \
     || warn "  reranker-api rsync failed (rebuild flow will be broken)"
 rsync -az -e "ssh -o BatchMode=yes -i $RERANKER_SSH_KEY" \
+    "$REPO_ROOT/services/_shared/metrics.py" "$RERANKER_SSH_USER@$RERANKER_IP:/tmp/reranker-api/metrics.py" \
+    || warn "  metrics.py rsync failed"
+rsync -az -e "ssh -o BatchMode=yes -i $RERANKER_SSH_KEY" \
     "$REPO_ROOT/scripts/" "$RERANKER_SSH_USER@$RERANKER_IP:/tmp/photoprism-scripts/" \
     || warn "  scripts rsync failed"
 

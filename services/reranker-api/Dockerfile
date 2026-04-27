@@ -1,11 +1,12 @@
-# Build context: services/  (so _shared/metrics.py is reachable).
+# Build context: services/reranker-api/  (not services/).
+# metrics.py is rsync'd here by 75_feedback_trainer.sh from services/_shared/metrics.py.
 FROM pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git libgl1-mesa-glx libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
-COPY reranker-api/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download Qwen2-VL base so runtime needs no internet
@@ -13,9 +14,9 @@ RUN python -c "from transformers import Qwen2VLForConditionalGeneration, AutoPro
     Qwen2VLForConditionalGeneration.from_pretrained('Qwen/Qwen2-VL-2B-Instruct'); \
     AutoProcessor.from_pretrained('Qwen/Qwen2-VL-2B-Instruct')"
 
-COPY reranker-api/qwen_lora_weights/ /app/qwen_lora_weights/
-COPY _shared/metrics.py /app/metrics.py
-COPY reranker-api/app.py .
+COPY qwen_lora_weights/ /app/qwen_lora_weights/
+COPY metrics.py /app/metrics.py
+COPY app.py .
 
 ENV TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
 

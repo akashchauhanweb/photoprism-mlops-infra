@@ -7,7 +7,6 @@ metadata:
 spec:
   selector: { app: ingest-api }
   ports:
-  - { name: http,    port: 8004, targetPort: 8004 }
   - { name: metrics, port: 8004, targetPort: 8004 }
 ---
 apiVersion: apps/v1

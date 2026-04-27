@@ -1407,7 +1407,7 @@
     },
     {
       "id": 34,
-      "title": "search-api \u2014 recent errors/warnings",
+      "title": "search-api \u2014 recent logs",
       "type": "logs",
       "datasource": {
         "type": "loki",
@@ -1427,7 +1427,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"search-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
+          "expr": "{namespace=\"photoprism-platform\", app=\"search-api\"}",
           "datasource": {
             "type": "loki",
             "uid": "PLACEHOLDER"
@@ -1437,7 +1437,7 @@
     },
     {
       "id": 35,
-      "title": "clip-api \u2014 recent errors/warnings",
+      "title": "clip-api \u2014 recent logs",
       "type": "logs",
       "datasource": {
         "type": "loki",
@@ -1457,7 +1457,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"clip-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
+          "expr": "{namespace=\"photoprism-platform\", app=\"clip-api\"}",
           "datasource": {
             "type": "loki",
             "uid": "PLACEHOLDER"
@@ -1467,7 +1467,7 @@
     },
     {
       "id": 36,
-      "title": "ingest-api \u2014 recent errors/warnings",
+      "title": "ingest-api \u2014 recent logs",
       "type": "logs",
       "datasource": {
         "type": "loki",
@@ -1487,7 +1487,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"ingest-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
+          "expr": "{namespace=\"photoprism-platform\", app=\"ingest-api\"}",
           "datasource": {
             "type": "loki",
             "uid": "PLACEHOLDER"
@@ -1497,7 +1497,7 @@
     },
     {
       "id": 37,
-      "title": "feature-worker \u2014 recent errors/warnings",
+      "title": "feature-worker \u2014 recent logs",
       "type": "logs",
       "datasource": {
         "type": "loki",
@@ -1517,7 +1517,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"feature-worker\"} |~ \"(?i)(error|warn|exception|fail)\"",
+          "expr": "{namespace=\"photoprism-platform\", app=\"feature-worker\"}",
           "datasource": {
             "type": "loki",
             "uid": "PLACEHOLDER"

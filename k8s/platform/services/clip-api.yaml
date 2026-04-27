@@ -7,7 +7,6 @@ metadata:
 spec:
   selector: { app: clip-api }
   ports:
-  - { name: http,    port: 8001, targetPort: 8001 }
   - { name: metrics, port: 8001, targetPort: 8001 }
 ---
 apiVersion: apps/v1

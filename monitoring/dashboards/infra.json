@@ -1024,7 +1024,7 @@
     },
     {
       "id": 25,
-      "title": "PVC capacity vs usage by namespace (bytes)",
+      "title": "PVC capacity & requests by namespace (bytes)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1064,13 +1064,21 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "kubelet_volume_stats_capacity_bytes{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
-          "legendFormat": "cap {{namespace}}/{{persistentvolumeclaim}}"
+          "expr": "kube_persistentvolume_capacity_bytes * on(persistentvolume) group_right kube_persistentvolume_claim_ref{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
+          "legendFormat": "cap {{namespace}}/{{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PLACEHOLDER"
+          }
         },
         {
           "refId": "B",
-          "expr": "kubelet_volume_stats_used_bytes{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
-          "legendFormat": "used {{namespace}}/{{persistentvolumeclaim}}"
+          "expr": "kube_persistentvolumeclaim_resource_requests_storage_bytes{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
+          "legendFormat": "req {{namespace}}/{{persistentvolumeclaim}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PLACEHOLDER"
+          }
         }
       ]
     },
