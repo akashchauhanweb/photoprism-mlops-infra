@@ -118,12 +118,12 @@ else
 fi
 
 # Verify metrics port is up
-for i in 1 2 3 4 5 6 7 8 9 10; do
+for i in $(seq 1 20); do
     if curl -sS --max-time 3 http://127.0.0.1:9400/metrics 2>/dev/null | grep -q '^DCGM_'; then
         echo "[gpu-vm] dcgm-exporter healthy on :9400"
         exit 0
     fi
-    sleep 2
+    sleep 3
 done
 echo "[gpu-vm] WARN: dcgm-exporter did not respond on :9400" >&2
 REMOTE_EOF
