@@ -79,7 +79,7 @@ log "log file: $LOG_FILE"
 log "node1 floating IP: ${NODE1_FLOATING_IP:-unknown}"
 
 # ---- Module list ----
-readonly ALL_STEPS=(00_prereqs 10_security_groups 20_sealed_secrets
+readonly ALL_STEPS=(00_prereqs 10_security_groups 20_sealed_secrets 22_build_images
                     25_restore_volumes 30_databases 32_restore_data 33_postgres_backup_cron 35_mlflow
                     40_services 50_photoprism
                     60_network_policies 65_gpu_vm_prereqs 70_reranker 75_feedback_trainer 80_grafana 85_dashboard 99_smoke)
