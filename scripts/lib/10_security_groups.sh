@@ -11,6 +11,7 @@ declare -A SG_RULES=(
     [allow-30532-proj24]="30532"        # postgres NodePort (feedback-trainer on GPU node)
     [allow-30500-proj24]="30500"        # mlflow
     [allow-30900-proj24]="30900"        # prometheus
+    [allow-30903-proj24]="30903"        # alertmanager
 )
 
 log "reconciling security groups..."

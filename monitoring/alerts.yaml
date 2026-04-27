@@ -1,0 +1,167 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: photoprism-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prom
+    role: alert-rules
+spec:
+  groups:
+  # ────────────────────────────────────────────────────────────────────
+  # Service availability
+  # ────────────────────────────────────────────────────────────────────
+  - name: photoprism.availability
+    interval: 30s
+    rules:
+      - alert: PostgresDown
+        expr: kube_deployment_status_replicas_available{namespace="photoprism-platform", deployment="postgres"} == 0
+        for: 2m
+        labels: { severity: critical, component: postgres }
+        annotations:
+          summary: "Postgres has 0 ready replicas"
+          description: "{{ $labels.deployment }} in {{ $labels.namespace }} has been down for 2m."
+
+      - alert: MLflowDown
+        expr: kube_deployment_status_replicas_available{namespace="photoprism-platform", deployment="mlflow"} == 0
+        for: 2m
+        labels: { severity: warning, component: mlflow }
+        annotations:
+          summary: "MLflow has 0 ready replicas"
+          description: "Tracking server is unreachable. Retrains will fail."
+
+      - alert: QdrantDown
+        expr: kube_deployment_status_replicas_available{namespace="photoprism-platform", deployment="qdrant"} == 0
+        for: 2m
+        labels: { severity: critical, component: qdrant }
+        annotations:
+          summary: "Qdrant has 0 ready replicas"
+          description: "Vector DB is down. Search will fail."
+
+      - alert: PhotoPrismDown
+        expr: kube_deployment_status_replicas_available{namespace="photoprism-production", deployment="photoprism"} == 0
+        for: 2m
+        labels: { severity: critical, component: photoprism }
+        annotations:
+          summary: "PhotoPrism has 0 ready replicas"
+
+      - alert: RerankerDown
+        expr: up{job="reranker-tunnel"} == 0
+        for: 5m
+        labels: { severity: warning, component: reranker }
+        annotations:
+          summary: "Reranker /metrics not reachable"
+          description: "search-api will silently fall back to ANN order."
+
+      - alert: DCGMExporterDown
+        expr: up{job="dcgm-tunnel"} == 0
+        for: 5m
+        labels: { severity: warning, component: gpu }
+        annotations:
+          summary: "DCGM exporter unreachable"
+          description: "GPU panels will be empty."
+
+  # ────────────────────────────────────────────────────────────────────
+  # SLO / latency / error rate
+  # ────────────────────────────────────────────────────────────────────
+  - name: photoprism.slo
+    interval: 30s
+    rules:
+      - alert: SearchHighErrorRate
+        expr: |
+          100 * sum(rate(pp_http_requests_total{service="search-api", status_class="5xx"}[5m]))
+            / clamp_min(sum(rate(pp_http_requests_total{service="search-api"}[5m])), 0.001)
+            > 5
+        for: 5m
+        labels: { severity: warning, component: search-api }
+        annotations:
+          summary: "search-api 5xx rate > 5% for 5m"
+          description: "Investigate Qdrant, clip-api, or reranker."
+
+      - alert: SearchHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(pp_http_request_duration_seconds_bucket{service="search-api", route="/search"}[5m]))
+          ) > 5
+        for: 10m
+        labels: { severity: warning, component: search-api }
+        annotations:
+          summary: "search-api p95 latency > 5s"
+
+      - alert: ClipApiHighErrorRate
+        expr: |
+          100 * sum by (modality) (rate(pp_clip_embed_total{outcome="error"}[5m]))
+            / clamp_min(sum by (modality) (rate(pp_clip_embed_total[5m])), 0.001)
+            > 10
+        for: 5m
+        labels: { severity: warning, component: clip-api }
+        annotations:
+          summary: "clip-api {{ $labels.modality }} error rate > 10%"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Workers / queues
+  # ────────────────────────────────────────────────────────────────────
+  - name: photoprism.workers
+    interval: 30s
+    rules:
+      - alert: FeatureWorkerQueueBacklog
+        expr: pp_feature_worker_queue_pending > 50
+        for: 10m
+        labels: { severity: warning, component: feature-worker }
+        annotations:
+          summary: "feature-worker pending queue > 50 for 10m"
+          description: "HPA should be scaling up; if not, check feature-worker logs."
+
+      - alert: FeatureWorkerFailing
+        expr: rate(pp_feature_worker_jobs_total{outcome="failed"}[10m]) > 0.1
+        for: 5m
+        labels: { severity: warning, component: feature-worker }
+        annotations:
+          summary: "feature-worker failing > 0.1 jobs/s"
+
+  # ────────────────────────────────────────────────────────────────────
+  # GPU / infra
+  # ────────────────────────────────────────────────────────────────────
+  - name: photoprism.gpu
+    interval: 30s
+    rules:
+      - alert: HighGPUMemoryUsage
+        expr: avg by (gpu) (DCGM_FI_DEV_FB_USED) / avg by (gpu) (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 0.95
+        for: 10m
+        labels: { severity: warning, component: gpu }
+        annotations:
+          summary: "GPU {{ $labels.gpu }} VRAM > 95% used for 10m"
+
+      - alert: HighGPUTemp
+        expr: avg by (gpu) (DCGM_FI_DEV_GPU_TEMP) > 85
+        for: 10m
+        labels: { severity: warning, component: gpu }
+        annotations:
+          summary: "GPU {{ $labels.gpu }} > 85°C for 10m"
+
+  # ────────────────────────────────────────────────────────────────────
+  # Cluster / node
+  # ────────────────────────────────────────────────────────────────────
+  - name: photoprism.infra
+    interval: 30s
+    rules:
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total{namespace=~"photoprism-platform|photoprism-production|monitoring"}[15m]) > 3
+        for: 5m
+        labels: { severity: warning, component: kubernetes }
+        annotations:
+          summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarted >3 times in 15m"
+
+      - alert: NodeDiskAlmostFull
+        expr: 100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) > 85
+        for: 10m
+        labels: { severity: warning, component: node }
+        annotations:
+          summary: "{{ $labels.instance }} root FS > 85% used"
+
+      - alert: HighNodeMemoryUsage
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 90
+        for: 15m
+        labels: { severity: warning, component: node }
+        annotations:
+          summary: "{{ $labels.instance }} memory > 90% for 15m"

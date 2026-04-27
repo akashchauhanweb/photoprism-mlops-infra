@@ -1,0 +1,51 @@
+# AlertmanagerConfig — pulled in by Alertmanager via labelSelector
+# (kube-prometheus-stack default: alertmanagerConfigSelector matches release=kube-prom).
+# Slack URL comes from the sealed secret `alertmanager-slack` (key: webhook-url).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: photoprism
+  namespace: monitoring
+  labels:
+    release: kube-prom
+spec:
+  route:
+    receiver: 'slack'
+    groupBy: ['alertname', 'component']
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      - matchers:
+          - { name: severity, value: critical }
+        receiver: 'slack-critical'
+        repeatInterval: 1h
+  receivers:
+    - name: 'slack'
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack
+            key: webhook-url
+          channel: '#alerts'
+          sendResolved: true
+          title: '{{ template "slack.default.title" . }}'
+          text: |-
+            {{ range .Alerts -}}
+            *{{ .Labels.alertname }}* — {{ .Labels.severity }}
+            {{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            {{ end }}
+    - name: 'slack-critical'
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack
+            key: webhook-url
+          channel: '#alerts'
+          sendResolved: true
+          title: '🚨 CRITICAL — {{ template "slack.default.title" . }}'
+          text: |-
+            {{ range .Alerts -}}
+            *{{ .Labels.alertname }}*
+            {{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            {{ end }}

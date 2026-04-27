@@ -37,6 +37,7 @@ Options:
 
 Available modules:
   00_prereqs   05_dns_patch   10_security_groups   15_monitoring_stack
+                    16_autoscaling_alerting
   20_sealed_secrets   22_build_images
   25_restore_volumes 30_databases   32_restore_data   33_postgres_backup_cron   35_mlflow
   40_services 50_photoprism          60_network_policies
@@ -84,6 +85,7 @@ log "node1 floating IP: ${NODE1_FLOATING_IP:-unknown}"
 # a Prometheus to scrape them.
 readonly ALL_STEPS=(00_prereqs 05_dns_patch 10_security_groups
                     15_monitoring_stack
+                    16_autoscaling_alerting
                     20_sealed_secrets 22_build_images
                     25_restore_volumes 30_databases 32_restore_data 33_postgres_backup_cron 35_mlflow
                     40_services 50_photoprism

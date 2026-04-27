@@ -1,0 +1,30 @@
+# prometheus-adapter — exposes Prom metrics to k8s HPA / external metrics API.
+#
+# We export ONE external metric: feature_worker_queue_pending (the queue depth
+# from feature-worker's /metrics endpoint). HPA on feature-worker scales when
+# this number rises.
+#
+# CPU-based HPAs (search-api, ingest-api, clip-api) need NO adapter; they use
+# the built-in metrics-server. The adapter is only needed for queue-depth.
+
+prometheus:
+  url: http://kube-prom-prometheus.monitoring.svc.cluster.local
+  port: 9090
+
+rules:
+  # CLEAR the default kube_pod_* CPU/mem rules — we don't need them; metrics-server already provides those.
+  default: false
+
+  external:
+    - seriesQuery: 'pp_feature_worker_queue_pending{namespace="photoprism-platform"}'
+      resources:
+        overrides:
+          namespace: { resource: namespace }
+      name:
+        matches: "pp_feature_worker_queue_pending"
+        as: "feature_worker_queue_pending"
+      metricsQuery: 'sum(<<.Series>>{<<.LabelMatchers>>})'
+
+resources:
+  requests: { cpu: 50m,  memory: 64Mi  }
+  limits:   { cpu: 200m, memory: 256Mi }

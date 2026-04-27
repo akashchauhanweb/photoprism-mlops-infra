@@ -44,8 +44,13 @@ prometheus:
 # ---- Alertmanager ----
 alertmanager:
   service:
-    type: ClusterIP
+    type: NodePort
+    nodePort: 30903
   alertmanagerSpec:
+    alertmanagerConfigSelector:
+      matchLabels: { release: kube-prom }
+    alertmanagerConfigMatcherStrategy:
+      type: None
     storage:
       volumeClaimTemplate:
         spec:

@@ -14,3 +14,4 @@ scripts/config.env
 # Jupyter
 **/.ipynb_checkpoints/
 provision/LICENSE.txt
+install_p2.sh
