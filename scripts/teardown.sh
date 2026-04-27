@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # PhotoPrism MLOps — full teardown.
-# Deletes K8s namespaces, the sealed-secrets master key, and the GPU reranker container.
+# Deletes K8s namespaces, the sealed-secrets master key, and the GPU containers.
 # Runs on node1.
 
 set -euo pipefail
@@ -25,8 +25,9 @@ ${RED}============================================${RESET}
 ${RED}============================================${RESET}
 This will DELETE:
   - K8s namespaces: photoprism-platform, photoprism-production, monitoring
+  - Helm releases : kube-prom, loki, promtail (in monitoring ns)
   - Sealed-secrets master key in kube-system
-  - Reranker container on GPU VM (${RERANKER_IP})
+  - Reranker + feedback-trainer + dcgm-exporter containers on GPU VM (${RERANKER_IP})
 
 A backup will be taken to S3 first (originals, storage, mariadb, qdrant, postgres).
 On failure of any component, teardown proceeds anyway with a loud warning.
@@ -48,10 +49,27 @@ if [[ -n "${RERANKER_IP:-}" ]]; then
     log "stopping GPU containers on ${RERANKER_IP}..."
     ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i "$RERANKER_SSH_KEY" \
         "$RERANKER_SSH_USER@$RERANKER_IP" \
-        "docker stop reranker-api feedback-trainer 2>/dev/null; docker rm reranker-api feedback-trainer 2>/dev/null; true" \
+        "docker stop reranker-api feedback-trainer dcgm-exporter 2>/dev/null; \
+         docker rm   reranker-api feedback-trainer dcgm-exporter 2>/dev/null; true" \
         || warn "  could not reach GPU VM (already down?)"
 else
     warn "RERANKER_IP empty — skipping GPU container cleanup"
+fi
+
+# ---- Uninstall helm releases (monitoring stack) ----
+# We do this BEFORE namespace deletion so helm cleans up CRDs / leftover PVCs cleanly.
+if command -v helm >/dev/null 2>&1; then
+    log "uninstalling helm releases in monitoring namespace..."
+    for rel in kube-prom loki promtail loki-stack; do
+        if helm -n monitoring list -q 2>/dev/null | grep -qx "$rel"; then
+            helm -n monitoring uninstall "$rel" >/dev/null 2>&1 \
+                && log "  uninstalled $rel" \
+                || warn "  $rel uninstall non-clean"
+        fi
+    done
+    # PVCs from helm releases (helm doesn't auto-remove these)
+    kubectl -n monitoring get pvc -o name 2>/dev/null \
+        | xargs -r kubectl -n monitoring delete --wait=false 2>/dev/null || true
 fi
 
 # ---- Delete namespaces ----

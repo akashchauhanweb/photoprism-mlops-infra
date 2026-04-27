@@ -34,7 +34,7 @@ spec:
         args:
         - --context=git://github.com/__GH_REPO__.git#refs/heads/__GH_BRANCH__
         - --context-sub-path=__SUBPATH__
-        - --dockerfile=Dockerfile
+        - --dockerfile=__DOCKERFILE__
         - --destination=__DESTINATION__
         - --cache=false
         - --single-snapshot

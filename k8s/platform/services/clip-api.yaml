@@ -3,10 +3,12 @@ kind: Service
 metadata:
   name: clip-api
   namespace: photoprism-platform
+  labels: { app: clip-api }
 spec:
   selector: { app: clip-api }
   ports:
-  - { port: 8001, targetPort: 8001 }
+  - { name: http,    port: 8001, targetPort: 8001 }
+  - { name: metrics, port: 8001, targetPort: 8001 }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,8 +25,8 @@ spec:
     spec:
       containers:
       - name: clip-api
-        image: akashweb/clip-api:0.1.1
-        ports: [{ containerPort: 8001 }]
+        image: akashweb/clip-api:0.2.0
+        ports: [{ name: http, containerPort: 8001 }]
         envFrom:
         - secretRef: { name: internal-token }
         readinessProbe:

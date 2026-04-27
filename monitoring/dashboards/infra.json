@@ -7,9 +7,9 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "photoprism",
-    "semantic-search",
-    "ml"
+    "infrastructure",
+    "kubernetes",
+    "gpu"
   ],
   "time": {
     "from": "now-1h",
@@ -17,13 +17,13 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "PhotoPrism Services",
-  "uid": "photoprism-services",
+  "title": "PhotoPrism Infrastructure",
+  "uid": "photoprism-infra",
   "version": 1,
   "panels": [
     {
       "id": 1,
-      "title": "Overview \u2014 SLO",
+      "title": "Cluster summary",
       "type": "row",
       "gridPos": {
         "x": 0,
@@ -36,7 +36,7 @@
     },
     {
       "id": 2,
-      "title": "Total request rate (req/s)",
+      "title": "Nodes",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -45,12 +45,12 @@
       "gridPos": {
         "x": 0,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
+          "unit": "none",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -78,28 +78,28 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(pp_http_requests_total[5m]))",
-          "legendFormat": "Total request rate (req/s)"
+          "expr": "count(kube_node_info)",
+          "legendFormat": "Nodes"
         }
       ]
     },
     {
       "id": 3,
-      "title": "5xx error rate (%)",
+      "title": "Running pods",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PLACEHOLDER"
       },
       "gridPos": {
-        "x": 6,
+        "x": 4,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "none",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -127,14 +127,63 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum(rate(pp_http_requests_total{status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(pp_http_requests_total[5m])), 1)",
-          "legendFormat": "5xx error rate (%)"
+          "expr": "sum(kube_pod_status_phase{phase=\"Running\"})",
+          "legendFormat": "Running pods"
         }
       ]
     },
     {
       "id": 4,
-      "title": "p95 latency across services (s)",
+      "title": "Pods Pending",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kube_pod_status_phase{phase=\"Pending\"})",
+          "legendFormat": "Pods Pending"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Pods Failed",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -143,12 +192,12 @@
       "gridPos": {
         "x": 12,
         "y": 1,
-        "w": 6,
+        "w": 4,
         "h": 4
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "none",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -176,14 +225,599 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_http_request_duration_seconds_bucket[5m])))",
-          "legendFormat": "p95 latency across services (s)"
+          "expr": "sum(kube_pod_status_phase{phase=\"Failed\"})",
+          "legendFormat": "Pods Failed"
         }
       ]
     },
     {
-      "id": 5,
-      "title": "Active services up",
+      "id": 6,
+      "title": "Failed Jobs (last 1h)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kube_job_failed)",
+          "legendFormat": "Failed Jobs (last 1h)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "PVCs",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(kube_persistentvolumeclaim_info)",
+          "legendFormat": "PVCs"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Per-namespace pod health",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "title": "Pods by namespace & phase",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace, phase) (kube_pod_status_phase{namespace=~\"photoprism-platform|photoprism-production|monitoring|kube-system\"})",
+          "legendFormat": "{{namespace}} / {{phase}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Node CPU / Memory / Disk",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 11,
+      "title": "CPU usage % per node",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])))",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Memory usage % per node",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 15,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Root FS usage % per node",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 15,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Network bytes/s per node (rx/tx)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cali.*|cni.*|docker.*\"}[1m]))",
+          "legendFormat": "rx {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cali.*|cni.*|docker.*\"}[1m]))",
+          "legendFormat": "tx {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Disk read/write bytes/s per node",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (instance) (rate(node_disk_read_bytes_total[1m]))",
+          "legendFormat": "read {{instance}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (instance) (rate(node_disk_written_bytes_total[1m]))",
+          "legendFormat": "write {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "GPU (DCGM)",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 17,
+      "title": "GPU 0 utilization (%)",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 70.0
+              },
+              {
+                "color": "red",
+                "value": 90.0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(DCGM_FI_DEV_GPU_UTIL{gpu=\"0\"})"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "GPU 1 utilization (%)",
+      "type": "gauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 30,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 70.0
+              },
+              {
+                "color": "red",
+                "value": 90.0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(DCGM_FI_DEV_GPU_UTIL{gpu=\"1\"})"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "GPU 0 memory used (MiB)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 30,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(DCGM_FI_DEV_FB_USED{gpu=\"0\"})",
+          "legendFormat": "GPU 0 memory used (MiB)"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "GPU 1 memory used (MiB)",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -191,7 +825,384 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 1,
+        "y": 30,
+        "w": 6,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mbytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg(DCGM_FI_DEV_FB_USED{gpu=\"1\"})",
+          "legendFormat": "GPU 1 memory used (MiB)"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "GPU utilization over time (%)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (gpu) (DCGM_FI_DEV_GPU_UTIL)",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "GPU memory used (MiB)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "mbytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (gpu) (DCGM_FI_DEV_FB_USED)",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "GPU temperature (\u00b0C) and power (W)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "avg by (gpu) (DCGM_FI_DEV_GPU_TEMP)",
+          "legendFormat": "GPU {{gpu}} temp \u00b0C"
+        },
+        {
+          "refId": "B",
+          "expr": "avg by (gpu) (DCGM_FI_DEV_POWER_USAGE)",
+          "legendFormat": "GPU {{gpu}} power W"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Storage (PVCs)",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 25,
+      "title": "PVC capacity vs usage by namespace (bytes)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "kubelet_volume_stats_capacity_bytes{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
+          "legendFormat": "cap {{namespace}}/{{persistentvolumeclaim}}"
+        },
+        {
+          "refId": "B",
+          "expr": "kubelet_volume_stats_used_bytes{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
+          "legendFormat": "used {{namespace}}/{{persistentvolumeclaim}}"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "title": "Service health & stability",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 27,
+      "title": "Scrape target up/down (1=up)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=~\".*\"}",
+          "legendFormat": "{{job}} {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "title": "Container restarts last 1h by namespace+pod",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 59,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}[1h]))",
+          "legendFormat": "{{namespace}}/{{pod}}"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "title": "Critical services (status)",
+      "type": "row",
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [],
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "title": "Postgres pods Ready",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
         "w": 6,
         "h": 4
       },
@@ -225,1180 +1236,165 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "count(count by (service) (pp_http_requests_total))",
-          "legendFormat": "Active services up"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "title": "search-api",
-      "type": "row",
-      "gridPos": {
-        "x": 0,
-        "y": 5,
-        "w": 24,
-        "h": 1
-      },
-      "panels": [],
-      "collapsed": false
-    },
-    {
-      "id": 7,
-      "title": "search-api \u2014 request rate by route (req/s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 6,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (route, status_class) (rate(pp_http_requests_total{service=\"search-api\"}[1m]))",
-          "legendFormat": "{{route}} {{status_class}}"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "search-api \u2014 latency p50/p95/p99 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 6,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le, route) (rate(pp_http_request_duration_seconds_bucket{service=\"search-api\"}[5m])))",
-          "legendFormat": "p50 {{route}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(pp_http_request_duration_seconds_bucket{service=\"search-api\"}[5m])))",
-          "legendFormat": "p95 {{route}}"
-        },
-        {
-          "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(pp_http_request_duration_seconds_bucket{service=\"search-api\"}[5m])))",
-          "legendFormat": "p99 {{route}}"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "title": "search-api \u2014 ANN vs Rerank latency p95 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 14,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_search_ann_latency_seconds_bucket[5m])))",
-          "legendFormat": "ANN p95"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_search_rerank_latency_seconds_bucket[5m])))",
-          "legendFormat": "Rerank p95"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "title": "search-api \u2014 rerank outcome",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 14,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (outcome) (rate(pp_search_rerank_outcome_total[5m]))",
-          "legendFormat": "{{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "title": "search-api \u2014 clicks & retrains (5m rate)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 21,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "rate(pp_search_clicks_total[5m])",
-          "legendFormat": "clicks/s"
-        },
-        {
-          "refId": "B",
-          "expr": "rate(pp_search_retrain_trigger_total[5m])",
-          "legendFormat": "retrain triggers/s"
-        }
-      ]
-    },
-    {
-      "id": 12,
-      "title": "search-api \u2014 untrained feedback rows (queue)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 21,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pp_search_untrained_feedback_rows",
-          "legendFormat": "untrained"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "title": "clip-api",
-      "type": "row",
-      "gridPos": {
-        "x": 0,
-        "y": 27,
-        "w": 24,
-        "h": 1
-      },
-      "panels": [],
-      "collapsed": false
-    },
-    {
-      "id": 14,
-      "title": "clip-api \u2014 embedding rate by modality (ops/s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 28,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (modality, outcome) (rate(pp_clip_embed_total[1m]))",
-          "legendFormat": "{{modality}} {{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "title": "clip-api \u2014 embedding latency p50/p95/p99 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 28,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le, modality) (rate(pp_clip_embed_latency_seconds_bucket[5m])))",
-          "legendFormat": "p50 {{modality}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, modality) (rate(pp_clip_embed_latency_seconds_bucket[5m])))",
-          "legendFormat": "p95 {{modality}}"
-        },
-        {
-          "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (le, modality) (rate(pp_clip_embed_latency_seconds_bucket[5m])))",
-          "legendFormat": "p99 {{modality}}"
-        }
-      ]
-    },
-    {
-      "id": 16,
-      "title": "clip-api \u2014 image payload size distribution",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 35,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "bytes"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(pp_clip_image_bytes_bucket[5m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_clip_image_bytes_bucket[5m])))",
-          "legendFormat": "p95"
-        }
-      ]
-    },
-    {
-      "id": 17,
-      "title": "clip-api \u2014 error rate (%)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 35,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "100 * sum by (modality) (rate(pp_clip_embed_total{outcome=\"error\"}[5m])) / clamp_min(sum by (modality) (rate(pp_clip_embed_total[5m])), 0.001)",
-          "legendFormat": "{{modality}}"
-        }
-      ]
-    },
-    {
-      "id": 18,
-      "title": "ingest-api",
-      "type": "row",
-      "gridPos": {
-        "x": 0,
-        "y": 41,
-        "w": 24,
-        "h": 1
-      },
-      "panels": [],
-      "collapsed": false
-    },
-    {
-      "id": 19,
-      "title": "ingest-api \u2014 webhook outcomes (events/s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 42,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (outcome) (rate(pp_ingest_webhook_total[1m]))",
-          "legendFormat": "{{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 20,
-      "title": "ingest-api \u2014 S3 PUT vs PhotoPrism download p95 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 42,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_ingest_s3_put_latency_seconds_bucket[5m])))",
-          "legendFormat": "s3_put p95"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_ingest_photoprism_download_latency_seconds_bucket[5m])))",
-          "legendFormat": "photoprism_dl p95"
-        }
-      ]
-    },
-    {
-      "id": 21,
-      "title": "ingest-api \u2014 bytes ingested (5m rate)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 49,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "Bps"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "rate(pp_ingest_bytes_total[5m])",
-          "legendFormat": "bytes/s"
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "title": "ingest-api \u2014 feature jobs enqueued (5m rate)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 49,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "rate(pp_ingest_enqueued_total[5m])",
-          "legendFormat": "enqueued/s"
-        }
-      ]
-    },
-    {
-      "id": 23,
-      "title": "feature-worker",
-      "type": "row",
-      "gridPos": {
-        "x": 0,
-        "y": 55,
-        "w": 24,
-        "h": 1
-      },
-      "panels": [],
-      "collapsed": false
-    },
-    {
-      "id": 24,
-      "title": "feature-worker \u2014 queue depth",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "pp_feature_worker_queue_pending",
-          "legendFormat": "pending"
-        },
-        {
-          "refId": "B",
-          "expr": "pp_feature_worker_queue_failed",
-          "legendFormat": "failed"
-        }
-      ]
-    },
-    {
-      "id": 25,
-      "title": "feature-worker \u2014 throughput (jobs/s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 56,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (outcome) (rate(pp_feature_worker_jobs_total[1m]))",
-          "legendFormat": "{{outcome}}"
-        }
-      ]
-    },
-    {
-      "id": 26,
-      "title": "feature-worker \u2014 job latency p50/p95/p99 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 63,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(pp_feature_worker_job_latency_seconds_bucket[5m])))",
-          "legendFormat": "p50"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_feature_worker_job_latency_seconds_bucket[5m])))",
-          "legendFormat": "p95"
-        },
-        {
-          "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(pp_feature_worker_job_latency_seconds_bucket[5m])))",
-          "legendFormat": "p99"
-        }
-      ]
-    },
-    {
-      "id": 27,
-      "title": "feature-worker \u2014 S3 fetch vs CLIP RTT p95 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 63,
-        "w": 12,
-        "h": 6
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_feature_worker_s3_fetch_seconds_bucket[5m])))",
-          "legendFormat": "S3 fetch p95"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_feature_worker_embed_rtt_seconds_bucket[5m])))",
-          "legendFormat": "CLIP RTT p95"
-        }
-      ]
-    },
-    {
-      "id": 28,
-      "title": "reranker-api",
-      "type": "row",
-      "gridPos": {
-        "x": 0,
-        "y": 69,
-        "w": 24,
-        "h": 1
-      },
-      "panels": [],
-      "collapsed": false
-    },
-    {
-      "id": 29,
-      "title": "reranker-api \u2014 call rate & per-image latency p95 (s)",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 70,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          },
-          "unit": "s"
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_reranker_per_image_seconds_bucket[5m])))",
-          "legendFormat": "per-image p95"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_reranker_total_latency_seconds_bucket[5m])))",
-          "legendFormat": "total p95"
-        }
-      ]
-    },
-    {
-      "id": 30,
-      "title": "reranker-api \u2014 documents per request",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 70,
-        "w": 12,
-        "h": 7
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(pp_reranker_documents_per_request_bucket[5m])))",
-          "legendFormat": "p50 docs"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(pp_reranker_documents_per_request_bucket[5m])))",
-          "legendFormat": "p95 docs"
+          "expr": "sum(kube_pod_container_status_ready{namespace=\"photoprism-platform\", container=\"postgres\"})",
+          "legendFormat": "Postgres pods Ready"
         }
       ]
     },
     {
       "id": 31,
-      "title": "reranker-api \u2014 score distribution (median, p90)",
-      "type": "timeseries",
+      "title": "MLflow pods Ready",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PLACEHOLDER"
       },
       "gridPos": {
-        "x": 0,
-        "y": 77,
-        "w": 12,
-        "h": 6
+        "x": 6,
+        "y": 67,
+        "w": 6,
+        "h": 4
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
           }
         },
         "overrides": []
       },
       "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "max"
-          ]
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.5, sum by (le) (rate(pp_reranker_score_bucket[5m])))",
-          "legendFormat": "p50 score"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.9, sum by (le) (rate(pp_reranker_score_bucket[5m])))",
-          "legendFormat": "p90 score"
+          "expr": "sum(kube_pod_container_status_ready{namespace=\"photoprism-platform\", container=\"mlflow\"})",
+          "legendFormat": "MLflow pods Ready"
         }
       ]
     },
     {
       "id": 32,
-      "title": "reranker-api \u2014 image load failures (5m rate)",
-      "type": "timeseries",
+      "title": "Qdrant pods Ready",
+      "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "PLACEHOLDER"
       },
       "gridPos": {
         "x": 12,
-        "y": 77,
-        "w": 12,
-        "h": 6
+        "y": 67,
+        "w": 6,
+        "h": 4
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
           }
         },
         "overrides": []
       },
       "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
           "calcs": [
-            "mean",
-            "max"
-          ]
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(pp_reranker_image_load_fail_total[5m])",
-          "legendFormat": "fails/s"
+          "expr": "sum(kube_pod_container_status_ready{namespace=\"photoprism-platform\", container=\"qdrant\"})",
+          "legendFormat": "Qdrant pods Ready"
         }
       ]
     },
     {
       "id": 33,
-      "title": "Logs (last 15m)",
+      "title": "PhotoPrism pods Ready",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PLACEHOLDER"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 67,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(kube_pod_container_status_ready{namespace=\"photoprism-production\", container=\"photoprism\"})",
+          "legendFormat": "PhotoPrism pods Ready"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "title": "Jobs & CronJobs",
       "type": "row",
       "gridPos": {
         "x": 0,
-        "y": 83,
+        "y": 71,
         "w": 24,
         "h": 1
       },
@@ -1406,122 +1402,105 @@
       "collapsed": false
     },
     {
-      "id": 34,
-      "title": "search-api \u2014 recent errors/warnings",
-      "type": "logs",
+      "id": 35,
+      "title": "Jobs status (active/succeeded/failed)",
+      "type": "timeseries",
       "datasource": {
-        "type": "loki",
+        "type": "prometheus",
         "uid": "PLACEHOLDER"
       },
       "gridPos": {
         "x": 0,
-        "y": 84,
+        "y": 72,
         "w": 12,
-        "h": 8
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
       },
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"search-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
-          "datasource": {
-            "type": "loki",
-            "uid": "PLACEHOLDER"
-          }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
         }
-      ]
-    },
-    {
-      "id": 35,
-      "title": "clip-api \u2014 recent errors/warnings",
-      "type": "logs",
-      "datasource": {
-        "type": "loki",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 84,
-        "w": 12,
-        "h": 8
-      },
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"clip-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
-          "datasource": {
-            "type": "loki",
-            "uid": "PLACEHOLDER"
-          }
+          "expr": "sum by (namespace) (kube_job_status_active{namespace=~\"photoprism-platform|photoprism-production|monitoring\"})",
+          "legendFormat": "active {{namespace}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (namespace) (kube_job_status_succeeded{namespace=~\"photoprism-platform|photoprism-production|monitoring\"})",
+          "legendFormat": "succeeded {{namespace}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (namespace) (kube_job_status_failed{namespace=~\"photoprism-platform|photoprism-production|monitoring\"})",
+          "legendFormat": "failed {{namespace}}"
         }
       ]
     },
     {
       "id": 36,
-      "title": "ingest-api \u2014 recent errors/warnings",
-      "type": "logs",
+      "title": "Last successful CronJob run age (s)",
+      "type": "timeseries",
       "datasource": {
-        "type": "loki",
-        "uid": "PLACEHOLDER"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 92,
-        "w": 12,
-        "h": 8
-      },
-      "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"ingest-api\"} |~ \"(?i)(error|warn|exception|fail)\"",
-          "datasource": {
-            "type": "loki",
-            "uid": "PLACEHOLDER"
-          }
-        }
-      ]
-    },
-    {
-      "id": 37,
-      "title": "feature-worker \u2014 recent errors/warnings",
-      "type": "logs",
-      "datasource": {
-        "type": "loki",
+        "type": "prometheus",
         "uid": "PLACEHOLDER"
       },
       "gridPos": {
         "x": 12,
-        "y": 92,
+        "y": 72,
         "w": 12,
-        "h": 8
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10
+          },
+          "unit": "s"
+        },
+        "overrides": []
       },
       "options": {
-        "showTime": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        }
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "{namespace=\"photoprism-platform\", app=\"feature-worker\"} |~ \"(?i)(error|warn|exception|fail)\"",
-          "datasource": {
-            "type": "loki",
-            "uid": "PLACEHOLDER"
-          }
+          "expr": "time() - kube_cronjob_status_last_successful_time{namespace=~\"photoprism-platform|photoprism-production|monitoring\"}",
+          "legendFormat": "{{namespace}}/{{cronjob}}"
         }
       ]
     }

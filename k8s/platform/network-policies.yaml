@@ -86,10 +86,8 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels: { kubernetes.io/metadata.name: photoprism-platform }
-    ports:
-    - { protocol: TCP, port: 6333 }
-    - { protocol: TCP, port: 6334 }
-  # Allow NodePort 30633 from anywhere (kubelet health checks + external debugging)
+    ports: [{ protocol: TCP, port: 6333 }]
+  # Allow NodePort 30633 from anywhere
   - ports: [{ protocol: TCP, port: 6333 }]
 ---
 # clip-api: only from feature-worker, search-api (both in platform ns)
@@ -139,6 +137,28 @@ spec:
   ingress:
   - ports: [{ protocol: TCP, port: 8010 }]
 ---
+# Allow Prometheus (in monitoring ns) to scrape metrics ports of platform services.
+# Catches all pods in this namespace; restricts source to namespace=monitoring.
+# Ports listed are: clip-api 8001, ingest-api 8004, search-api 8010 (same as http,
+# since /metrics is served on the same FastAPI port), feature-worker 9100.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: photoprism-platform
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: monitoring }
+    ports:
+    - { protocol: TCP, port: 8001 }
+    - { protocol: TCP, port: 8004 }
+    - { protocol: TCP, port: 8010 }
+    - { protocol: TCP, port: 9100 }
+---
 # PRODUCTION namespace
 ---
 # photoprism: public via NodePort; also callable from ingest-api (for /photos/:uid/dl)
@@ -152,7 +172,7 @@ spec:
     matchLabels: { app: photoprism }
   policyTypes: [Ingress]
   ingress:
-  - ports: [{ protocol: TCP, port: 2342 }]
+  - ports: [{ protocol: TCP, port: 2342 }]   # NodePort 30234 from anywhere
 ---
 # mariadb: only from photoprism in same ns
 apiVersion: networking.k8s.io/v1

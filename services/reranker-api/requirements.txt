@@ -8,3 +8,4 @@ qwen-vl-utils==0.0.8
 Pillow==10.4.0
 requests==2.32.3
 pydantic==2.9.2
+prometheus-client==0.21.0

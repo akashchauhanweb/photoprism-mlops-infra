@@ -18,6 +18,8 @@ from botocore.client import Config
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+from metrics import install_worker, ml_counter, ml_histogram, ml_gauge
+
 BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.environ["S3_ENDPOINT"]
 S3_REGION = os.environ.get("S3_REGION", "chi-tacc")
@@ -28,6 +30,37 @@ EMBEDDING_DIM = 512
 POLL_INTERVAL = 5  # seconds between polls when queue is empty
 QDRANT_HOST = os.environ.get("QDRANT_HOST", "qdrant")
 QDRANT_PORT = int(os.environ.get("QDRANT_PORT", "6333"))
+METRICS_PORT = int(os.environ.get("METRICS_PORT", "9100"))
+
+# ---- ML signals ----
+JOBS_PROCESSED = ml_counter(
+    "pp_feature_worker_jobs_total",
+    "Feature jobs processed",
+    ["outcome"],  # done | failed
+)
+JOB_LATENCY = ml_histogram(
+    "pp_feature_worker_job_latency_seconds",
+    "End-to-end job processing latency (S3 fetch + CLIP embed + Qdrant upsert)",
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+)
+S3_FETCH_LATENCY = ml_histogram(
+    "pp_feature_worker_s3_fetch_seconds",
+    "S3 GET latency",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+EMBED_RTT = ml_histogram(
+    "pp_feature_worker_embed_rtt_seconds",
+    "Round-trip to clip-api /embed/image",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+)
+QUEUE_DEPTH = ml_gauge(
+    "pp_feature_worker_queue_pending",
+    "Number of feature_jobs rows in pending status",
+)
+QUEUE_FAILED = ml_gauge(
+    "pp_feature_worker_queue_failed",
+    "Number of feature_jobs rows in failed status",
+)
 
 
 def get_pg_conn():
@@ -62,26 +95,31 @@ def ensure_collection(qdrant: QdrantClient) -> None:
 
 
 def compute_embedding(image_bytes: bytes) -> list[float]:
+    start = time.perf_counter()
     r = httpx.post(
         f"{CLIP_API_URL}/embed/image",
         files={"file": ("image.jpg", image_bytes, "image/jpeg")},
         headers={"X-Internal-Token": INTERNAL_TOKEN},
-	timeout=30,
+        timeout=30,
     )
     r.raise_for_status()
+    EMBED_RTT.observe(time.perf_counter() - start)
     return r.json()["embedding"]
 
 
 def process_job(cur, job_id, image_id, s3_key, s3, qdrant):
+    job_start = time.perf_counter()
     # Download image from S3
+    s3_start = time.perf_counter()
     response = s3.get_object(Bucket=BUCKET, Key=s3_key)
     image_bytes = response["Body"].read()
+    S3_FETCH_LATENCY.observe(time.perf_counter() - s3_start)
 
     # Compute embedding
     embedding = compute_embedding(image_bytes)
     assert len(embedding) == EMBEDDING_DIM, f"Expected {EMBEDDING_DIM}-d, got {len(embedding)}"
 
-    # Upsert into Qdrant — use hash of image_id as integer point ID
+    # Upsert into Qdrant
     point_id = abs(hash(image_id)) % (2**53)
     qdrant.upsert(
         collection_name=COLLECTION_NAME,
@@ -92,15 +130,24 @@ def process_job(cur, job_id, image_id, s3_key, s3, qdrant):
         )],
     )
 
-    # Mark done
     cur.execute(
         "UPDATE feature_jobs SET status='done', completed_at=NOW() WHERE job_id=%s",
         (job_id,),
     )
+    JOB_LATENCY.observe(time.perf_counter() - job_start)
     print(f"  [done] {image_id} → Qdrant point {point_id}")
 
 
+def refresh_queue_gauges(cur):
+    cur.execute("SELECT status, COUNT(*) FROM feature_jobs GROUP BY status")
+    counts = {row[0]: row[1] for row in cur.fetchall()}
+    QUEUE_DEPTH.set(counts.get("pending", 0))
+    QUEUE_FAILED.set(counts.get("failed", 0))
+
+
 def main():
+    install_worker("feature-worker", METRICS_PORT)
+    print(f"metrics exporter listening on :{METRICS_PORT}")
 
     s3 = get_s3_client()
 
@@ -114,7 +161,6 @@ def main():
             conn = get_pg_conn()
             with conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                    # Claim one pending job atomically — safe for multiple workers
                     cur.execute("""
                         SELECT job_id, image_id, s3_key
                         FROM feature_jobs
@@ -124,6 +170,8 @@ def main():
                         FOR UPDATE SKIP LOCKED
                     """)
                     row = cur.fetchone()
+
+                    refresh_queue_gauges(cur)
 
                     if row is None:
                         time.sleep(POLL_INTERVAL)
@@ -138,11 +186,13 @@ def main():
 
                     try:
                         process_job(cur, job_id, image_id, s3_key, s3, qdrant)
+                        JOBS_PROCESSED.labels(outcome="done").inc()
                     except Exception as exc:
                         cur.execute(
                             "UPDATE feature_jobs SET status='failed', completed_at=NOW(), error=%s WHERE job_id=%s",
                             (str(exc), job_id),
                         )
+                        JOBS_PROCESSED.labels(outcome="failed").inc()
                         print(f"  [failed] {image_id}: {exc}")
 
             conn.close()

@@ -1,3 +1,18 @@
+# feature-worker is a daemon (not HTTP-serving) but exposes a Prometheus
+# exporter on :9100 — give it a Service so kube-prometheus-stack's
+# ServiceMonitor can scrape via DNS (ServiceMonitors require a Service).
+apiVersion: v1
+kind: Service
+metadata:
+  name: feature-worker
+  namespace: photoprism-platform
+  labels: { app: feature-worker }
+spec:
+  clusterIP: None  # headless — we only need it for ServiceMonitor target discovery
+  selector: { app: feature-worker }
+  ports:
+  - { name: metrics, port: 9100, targetPort: 9100 }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,7 +28,9 @@ spec:
     spec:
       containers:
       - name: feature-worker
-        image: akashweb/feature-worker:0.3.0
+        image: akashweb/feature-worker:0.4.0
+        ports:
+        - { name: metrics, containerPort: 9100 }
         envFrom:
         - secretRef: { name: objectstore-credentials }
         - secretRef: { name: feature-worker-secrets }
@@ -21,7 +38,7 @@ spec:
         env:
         - { name: QDRANT_HOST, value: "qdrant.photoprism-platform" }
         - { name: QDRANT_PORT, value: "6333" }
+        - { name: METRICS_PORT, value: "9100" }
         resources:
           requests: { cpu: 500m, memory: 1Gi }
           limits:   { cpu: "2",  memory: 3Gi }
-

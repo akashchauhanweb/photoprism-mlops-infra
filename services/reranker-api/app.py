@@ -1,5 +1,6 @@
 import logging
 import os
+import time as _t
 from io import BytesIO
 from contextlib import asynccontextmanager
 from typing import List
@@ -10,6 +11,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from PIL import Image
 from pydantic import BaseModel
+
+from metrics import install_fastapi, ml_counter, ml_histogram, ml_gauge
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,6 +25,36 @@ LORA_PATH = os.environ.get("LORA_PATH", "/app/qwen_lora_weights")
 INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
 
 state: dict = {}
+
+# ---- ML signals ----
+RERANK_LATENCY = ml_histogram(
+    "pp_reranker_total_latency_seconds",
+    "End-to-end /rerank latency (image-fetch + model passes)",
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+)
+PER_IMAGE_LATENCY = ml_histogram(
+    "pp_reranker_per_image_seconds",
+    "Per-image scoring latency",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+)
+IMAGE_LOAD_FAIL = ml_counter(
+    "pp_reranker_image_load_fail_total",
+    "Images that failed to load (HTTP fetch / decode)",
+)
+DOCS_PER_REQUEST = ml_histogram(
+    "pp_reranker_documents_per_request",
+    "Number of documents per /rerank call",
+    buckets=(1, 2, 5, 10, 20, 50),
+)
+SCORE_DIST = ml_histogram(
+    "pp_reranker_score",
+    "Distribution of softmax scores returned",
+    buckets=(0.0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0),
+)
+MODEL_LOADED = ml_gauge(
+    "pp_reranker_model_loaded",
+    "1 if model+LoRA are loaded, else 0",
+)
 
 
 @asynccontextmanager
@@ -41,16 +74,20 @@ async def lifespan(app: FastAPI):
     )
     state["model"] = model
     state["processor"] = processor
+    MODEL_LOADED.set(1)
     log.info("startup ok")
     yield
+    MODEL_LOADED.set(0)
 
 
 app = FastAPI(lifespan=lifespan)
+install_fastapi(app, "reranker-api")
 
 
 @app.middleware("http")
 async def require_internal_token(request: Request, call_next):
-    if request.url.path in ("/health", "/ready"):
+    # /metrics joins the open list so Prometheus can scrape unauthenticated
+    if request.url.path in ("/health", "/ready", "/metrics"):
         return await call_next(request)
     if request.headers.get("X-Internal-Token") != INTERNAL_TOKEN:
         return JSONResponse({"detail": "forbidden"}, status_code=403)
@@ -88,6 +125,9 @@ def rerank(body: RerankIn):
     if not query_text:
         raise HTTPException(400, "query.text required")
 
+    DOCS_PER_REQUEST.observe(len(body.documents))
+    total_start = _t.perf_counter()
+
     model = state["model"]
     processor = state["processor"]
     device = next(model.parameters()).device
@@ -106,10 +146,12 @@ def rerank(body: RerankIn):
                     image = Image.open(image_ref).convert("RGB")
             except Exception as e:
                 log.warning(f"load fail {image_ref}: {e}")
+                IMAGE_LOAD_FAIL.inc()
                 raw_scores.append(-999.0)
                 images_out.append(image_ref)
                 continue
 
+            per_start = _t.perf_counter()
             messages = [{"role": "user", "content": [
                 {"type": "image", "image": image},
                 {"type": "text", "text":
@@ -125,10 +167,10 @@ def rerank(body: RerankIn):
                 out = model(**inputs)
                 raw = out.logits[:, -1, :].mean().item()
 
+            PER_IMAGE_LATENCY.observe(_t.perf_counter() - per_start)
             raw_scores.append(raw)
             images_out.append(image_ref)
 
-    # Softmax across all candidates — proper probability distribution
     softmax_scores = torch.softmax(torch.tensor(raw_scores), dim=0).tolist()
 
     results = [
@@ -136,4 +178,9 @@ def rerank(body: RerankIn):
         for img, score in zip(images_out, softmax_scores)
     ]
     results.sort(key=lambda x: x["score"], reverse=True)
+
+    for r in results:
+        SCORE_DIST.observe(r["score"])
+
+    RERANK_LATENCY.observe(_t.perf_counter() - total_start)
     return RerankOut(results=results)

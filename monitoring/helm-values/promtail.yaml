@@ -1,0 +1,15 @@
+# Promtail — DaemonSet that ships pod logs to loki.
+config:
+  clients:
+    - url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+  snippets:
+    pipelineStages:
+      - cri: {}
+      - match:
+          selector: '{namespace=~"photoprism-platform|photoprism-production|monitoring|kube-system"}'
+          stages: []
+resources:
+  requests: { cpu: 50m,  memory: 64Mi  }
+  limits:   { cpu: 200m, memory: 256Mi }
+serviceMonitor:
+  enabled: true

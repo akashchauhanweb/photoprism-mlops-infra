@@ -1,0 +1,99 @@
+# kube-prometheus-stack values
+# Goals:
+#  - Single Grafana for the cluster (this one), exposed on existing NodePort 30300
+#  - Prometheus persistence on local-path so it survives pod restarts (NOT teardown)
+#  - ServiceMonitor selector wide-open so we can drop monitors anywhere
+#  - Modest retention (course infra is small)
+
+fullnameOverride: kube-prom
+
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeProxy: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+
+# ---- Prometheus ----
+prometheus:
+  service:
+    type: NodePort
+    nodePort: 30900
+  prometheusSpec:
+    retention: 7d
+    retentionSize: "8GB"
+    # Watch ServiceMonitors / PodMonitors / PrometheusRules in ALL namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+    resources:
+      requests: { cpu: 200m, memory: 800Mi }
+      limits:   { cpu: "2",  memory: 2Gi   }
+
+# ---- Alertmanager ----
+alertmanager:
+  service:
+    type: ClusterIP
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+    resources:
+      requests: { cpu: 50m,  memory: 64Mi  }
+      limits:   { cpu: 200m, memory: 256Mi }
+
+# ---- Grafana (THE single Grafana for the cluster) ----
+grafana:
+  enabled: true
+  adminPassword: ""  # auto-generated; secret name = `kube-prom-grafana`
+  service:
+    type: NodePort
+    nodePort: 30300
+  persistence:
+    enabled: true
+    storageClassName: local-path
+    size: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+  # Loki datasource is provisioned via a sidecar that watches a labeled
+  # ConfigMap (see k8s/platform/monitoring/grafana-loki-datasource.yaml).
+  sidecar:
+    datasources:
+      enabled: true
+      label: grafana_datasource
+      labelValue: "1"
+    dashboards:
+      enabled: false   # we POST dashboards via API in 80_grafana.sh
+
+# ---- Exporters ----
+nodeExporter:
+  enabled: true
+kube-state-metrics:
+  enabled: true
+prometheus-node-exporter:
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+# ---- Operator ----
+prometheusOperator:
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi  }
+    limits:   { cpu: 300m, memory: 256Mi }

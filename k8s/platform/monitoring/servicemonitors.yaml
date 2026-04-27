@@ -1,0 +1,60 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: photoprism-platform-services
+  namespace: monitoring
+  labels:
+    release: kube-prom
+spec:
+  namespaceSelector:
+    matchNames:
+      - photoprism-platform
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values: [search-api, clip-api, ingest-api, feature-worker]
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+# Reranker on the GPU VM is reached through the in-cluster tunnel pod
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: reranker-tunnel
+  namespace: monitoring
+  labels:
+    release: kube-prom
+spec:
+  namespaceSelector:
+    matchNames: [monitoring]
+  selector:
+    matchLabels:
+      app: reranker-tunnel
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dcgm-tunnel
+  namespace: monitoring
+  labels:
+    release: kube-prom
+spec:
+  namespaceSelector:
+    matchNames: [monitoring]
+  selector:
+    matchLabels:
+      app: dcgm-tunnel
+  endpoints:
+    - port: dcgm
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

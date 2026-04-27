@@ -9,6 +9,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
+from metrics import install_fastapi, ml_counter, ml_histogram, ml_gauge
+
 logging.basicConfig(
     level=logging.INFO,
     format='{"time":"%(asctime)s","level":"%(levelname)s","svc":"search-api","msg":"%(message)s"}',
@@ -46,6 +48,40 @@ s3 = boto3.client(
     config=Config(signature_version="s3v4"),
 ) if S3_ENDPOINT else None
 
+# ---- ML signals ----
+ANN_LATENCY = ml_histogram(
+    "pp_search_ann_latency_seconds",
+    "Qdrant ANN search latency (post-CLIP-embed) in /search",
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+)
+RERANK_LATENCY = ml_histogram(
+    "pp_search_rerank_latency_seconds",
+    "Reranker round-trip latency from search-api",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
+)
+RERANK_OUTCOME = ml_counter(
+    "pp_search_rerank_outcome_total",
+    "Whether reranker was used or fell back",
+    ["outcome"],  # used | fallback_disabled | fallback_no_hits | fallback_error
+)
+RERANK_HIT_SCORE = ml_histogram(
+    "pp_search_rerank_score",
+    "Distribution of post-rerank scores returned to user",
+    buckets=(0.0, 0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0),
+)
+SEARCH_HITS_RETURNED = ml_histogram(
+    "pp_search_hits_returned",
+    "Number of hits returned per /search call",
+    buckets=(0, 1, 2, 5, 10, 20, 50, 100),
+)
+CLICKS_TOTAL = ml_counter("pp_search_clicks_total", "Click feedback events recorded")
+RETRAIN_TRIGGERED = ml_counter("pp_search_retrain_trigger_total", "Retrain triggers fired")
+UNTRAINED_FEEDBACK = ml_gauge(
+    "pp_search_untrained_feedback_rows",
+    "Number of search_results rows with trained_at IS NULL",
+)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     with psycopg.connect(PG_DSN) as conn:
@@ -64,6 +100,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+install_fastapi(app, "search-api")
 
 
 class SearchIn(BaseModel):
@@ -100,6 +137,7 @@ def ready():
 
 @app.post("/search", response_model=SearchOut)
 async def search(body: SearchIn):
+    import time as _t
     # 1. Embed the query via clip-api
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
@@ -110,12 +148,14 @@ async def search(body: SearchIn):
         r.raise_for_status()
         vector = r.json()["embedding"]
 
-    # 2. ANN search in Qdrant
+    # 2. ANN search in Qdrant (timed)
+    _ann_start = _t.perf_counter()
     results = qdrant.search(
         collection_name=COLLECTION,
         query_vector=vector,
         limit=min(body.top_k, 10),
     )
+    ANN_LATENCY.observe(_t.perf_counter() - _ann_start)
 
     hits = [
         SearchHit(
@@ -130,7 +170,11 @@ async def search(body: SearchIn):
         log.info("  ANN[%2d] score=%.4f image_id=%s", i, h.score, h.image_id)
 
     # Optional rerank via GPU reranker-api
-    if RERANKER_ENABLED and RERANKER_URL and hits and s3:
+    if not (RERANKER_ENABLED and RERANKER_URL):
+        RERANK_OUTCOME.labels(outcome="fallback_disabled").inc()
+    elif not hits or not s3:
+        RERANK_OUTCOME.labels(outcome="fallback_no_hits").inc()
+    else:
         try:
             docs = []
             url_to_hit = {}
@@ -145,6 +189,7 @@ async def search(body: SearchIn):
                 docs.append({"image": url})
                 url_to_hit[url] = h
 
+            _rr_start = _t.perf_counter()
             async with httpx.AsyncClient(timeout=60) as client:
                 r = await client.post(
                     f"{RERANKER_URL}/rerank",
@@ -153,24 +198,33 @@ async def search(body: SearchIn):
                 )
                 r.raise_for_status()
                 reranked = r.json()["results"][:RERANKER_TOP_K]
+            RERANK_LATENCY.observe(_t.perf_counter() - _rr_start)
 
             new_hits = []
             for r_item in reranked:
                 h = url_to_hit.get(r_item["image"])
                 if h is None:
                     continue
+                score = float(r_item["score"])
+                RERANK_HIT_SCORE.observe(score)
                 new_hits.append(SearchHit(
                     image_id=h.image_id,
                     s3_key=h.s3_key,
-                    score=float(r_item["score"]),
+                    score=score,
                 ))
             if new_hits:
                 log.info("RERANK returned %d hits (top_k=%d)", len(new_hits), RERANKER_TOP_K)
                 for i, h in enumerate(new_hits[:10]):
                     log.info("  RR[%2d] score=%.4f image_id=%s", i, h.score, h.image_id)
                 hits = new_hits
+                RERANK_OUTCOME.labels(outcome="used").inc()
+            else:
+                RERANK_OUTCOME.labels(outcome="fallback_error").inc()
         except Exception as e:
             log.warning(f"rerank failed, returning ANN order: {e}")
+            RERANK_OUTCOME.labels(outcome="fallback_error").inc()
+
+    SEARCH_HITS_RETURNED.observe(len(hits))
 
     # 3. Log to Postgres for analytics
     query_id = str(uuid.uuid4())
@@ -211,6 +265,8 @@ async def _click_and_maybe_retrain(body: ClickIn):
             log.info(f"[click] rowcount={cur.rowcount}")
             if cur.rowcount == 0:
                 log.warning(f"[click] not matched: query_id={body.query_id} image_id={body.image_id}")
+            else:
+                CLICKS_TOTAL.inc()
     except Exception as e:
         log.error(f"[click] DB update failed: {e}")
         return
@@ -226,6 +282,7 @@ async def _click_and_maybe_retrain(body: ClickIn):
         with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM search_results WHERE trained_at IS NULL")
             total = cur.fetchone()[0]
+            UNTRAINED_FEEDBACK.set(total)
     except Exception as e:
         log.error(f"[click] row count query failed: {e}")
         return
@@ -237,6 +294,7 @@ async def _click_and_maybe_retrain(body: ClickIn):
             async with httpx.AsyncClient(timeout=10) as client:
                 r = await client.post(f"{RETRAIN_URL}/train", json={})
                 log.info(f"[click] retrain triggered: status={r.status_code} body={r.text[:200]}")
+                RETRAIN_TRIGGERED.inc()
         except Exception as e:
             log.warning(f"[click] retrain trigger failed (non-fatal): {e}")
     else:
@@ -257,6 +315,7 @@ async def retrain_state():
         with psycopg.connect(PG_DSN) as conn, conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM search_results WHERE trained_at IS NULL")
             out["untrained_count"] = cur.fetchone()[0]
+            UNTRAINED_FEEDBACK.set(out["untrained_count"])
     except Exception as e:
         out["untrained_count"] = None
         out["count_error"] = str(e)

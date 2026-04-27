@@ -1,4 +1,7 @@
-# 65_gpu_vm_prereqs.sh — install docker + nvidia-container-toolkit on the GPU VM.
+# 65_gpu_vm_prereqs.sh — install docker + nvidia-container-toolkit on the GPU VM
+# AND start a DCGM exporter container so cluster-Prometheus can scrape GPU metrics
+# (via the autossh reverse-tunnel deployed by 15_monitoring_stack.sh).
+#
 # Idempotent: skips installs that are already present. Runs before 70_reranker
 # and 75_feedback_trainer.
 #
@@ -13,16 +16,15 @@ SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=no -i $RERANKER_SSH_KEY $RERA
 
 log "checking GPU VM prereqs on $RERANKER_IP..."
 
-# Probe: docker present + GPU runtime usable
+need_install=1
 if $SSH "docker --version >/dev/null 2>&1 && docker info 2>/dev/null | grep -q 'Runtimes:.*nvidia'"; then
-    log "  docker + nvidia-container-toolkit already installed — skipping"
-    return 0
+    log "  docker + nvidia-container-toolkit already installed"
+    need_install=0
 fi
 
-log "  installing docker (official apt repo) + nvidia-container-toolkit..."
-
-# Single SSH session that does everything; output is streamed.
-$SSH 'bash -s' <<'REMOTE_EOF'
+if (( need_install == 1 )); then
+    log "  installing docker (official apt repo) + nvidia-container-toolkit..."
+    $SSH 'bash -s' <<'REMOTE_EOF'
 set -euo pipefail
 
 log()  { echo "[gpu-vm] $*"; }
@@ -82,6 +84,48 @@ else
 fi
 
 log "GPU VM prereqs OK"
+REMOTE_EOF
+fi
+
+# --- 4. DCGM exporter container — always reconcile to current image ---
+DCGM_IMAGE="${DCGM_EXPORTER_IMAGE:-nvcr.io/nvidia/k8s/dcgm-exporter:3.3.7-3.5.0-ubuntu22.04}"
+
+log "ensuring DCGM exporter on $RERANKER_IP (image=$DCGM_IMAGE)..."
+$SSH "bash -s" <<REMOTE_EOF
+set -euo pipefail
+DESIRED="$DCGM_IMAGE"
+
+# Pull (cheap if cached). If pull fails, keep existing container running.
+sudo docker pull "\$DESIRED" >/dev/null 2>&1 || echo "[gpu-vm] DCGM image pull failed — using cache"
+
+running_id=\$(sudo docker inspect dcgm-exporter --format '{{.Image}}' 2>/dev/null || echo none)
+desired_id=\$(sudo docker image inspect "\$DESIRED" --format '{{.Id}}' 2>/dev/null || echo none)
+status=\$(sudo docker inspect dcgm-exporter --format '{{.State.Status}}' 2>/dev/null || echo none)
+
+if [[ "\$running_id" == "\$desired_id" && "\$status" == "running" ]]; then
+    echo "[gpu-vm] dcgm-exporter already running with desired image"
+else
+    echo "[gpu-vm] (re)deploying dcgm-exporter..."
+    sudo docker stop dcgm-exporter 2>/dev/null || true
+    sudo docker rm   dcgm-exporter 2>/dev/null || true
+    # --net host so the autossh tunnel can reach it via 127.0.0.1:9400
+    sudo docker run -d --name dcgm-exporter \
+        --restart unless-stopped \
+        --gpus all \
+        --cap-add SYS_ADMIN \
+        --net host \
+        "\$DESIRED" >/dev/null
+fi
+
+# Verify metrics port is up
+for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -sS --max-time 3 http://127.0.0.1:9400/metrics 2>/dev/null | grep -q '^DCGM_'; then
+        echo "[gpu-vm] dcgm-exporter healthy on :9400"
+        exit 0
+    fi
+    sleep 2
+done
+echo "[gpu-vm] WARN: dcgm-exporter did not respond on :9400" >&2
 REMOTE_EOF
 
 log "GPU VM prereqs OK"

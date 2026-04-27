@@ -1,0 +1,55 @@
+# Loki — single-binary mode, filesystem storage, no Grafana (we use the one in k-p-s).
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 168h     # 7 days
+    allow_structured_metadata: false
+    volume_enabled: true
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: local-path
+    size: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 1Gi   }
+
+# Disable everything we don't use in single-binary mode
+test:
+  enabled: false
+monitoring:
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+  lokiCanary:
+    enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+gateway:
+  enabled: false

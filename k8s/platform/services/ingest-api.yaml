@@ -3,10 +3,12 @@ kind: Service
 metadata:
   name: ingest-api
   namespace: photoprism-platform
+  labels: { app: ingest-api }
 spec:
   selector: { app: ingest-api }
   ports:
-  - { port: 8004, targetPort: 8004 }
+  - { name: http,    port: 8004, targetPort: 8004 }
+  - { name: metrics, port: 8004, targetPort: 8004 }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -23,8 +25,8 @@ spec:
     spec:
       containers:
       - name: ingest-api
-        image: akashweb/ingest-api:0.1.3
-        ports: [{ containerPort: 8004 }]
+        image: akashweb/ingest-api:0.2.0
+        ports: [{ name: http, containerPort: 8004 }]
         envFrom:
         - secretRef: { name: objectstore-credentials }
         - secretRef: { name: ingest-api-secrets }

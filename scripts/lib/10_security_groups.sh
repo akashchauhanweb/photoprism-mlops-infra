@@ -4,11 +4,13 @@
 declare -A SG_RULES=(
     [allow-ssh-proj24]="22"
     [allow-30234-proj24]="30234"        # photoprism
-    [allow-30633-proj24]="30633" # qdrant
+    [allow-30633-proj24]="30633"        # qdrant
     [allow-30300-proj24]="30300"        # grafana
     [allow-30443-proj24]="30443"        # k8s dashboard
     [allow-30810-proj24]="30810"        # search-api
     [allow-30532-proj24]="30532"        # postgres NodePort (feedback-trainer on GPU node)
+    [allow-30500-proj24]="30500"        # mlflow
+    [allow-30900-proj24]="30900"        # prometheus
 )
 
 log "reconciling security groups..."

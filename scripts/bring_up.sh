@@ -29,18 +29,19 @@ touch "$LOG_FILE"
 SINGLE_STEP=""
 usage() {
     cat <<EOF
-Usage: $0 [--step <name>]
+Usage: $0 [--step <n>]
 
 Options:
-  --step <name>   Run only one module (e.g. 40_services). Default: run all.
+  --step <n>   Run only one module (e.g. 40_services). Default: run all.
   -h, --help      Show this help.
 
 Available modules:
-  00_prereqs   10_security_groups   20_sealed_secrets
+  00_prereqs   05_dns_patch   10_security_groups   15_monitoring_stack
+  20_sealed_secrets   22_build_images
   25_restore_volumes 30_databases   32_restore_data   33_postgres_backup_cron   35_mlflow
   40_services 50_photoprism          60_network_policies
-  70_reranker 75_feedback_trainer   80_grafana   85_dashboard   99_smoke
-  65_gpu_vm_prereqs
+  65_gpu_vm_prereqs   70_reranker 75_feedback_trainer
+  80_grafana   85_dashboard   99_smoke
 EOF
 }
 while [[ $# -gt 0 ]]; do
@@ -79,7 +80,11 @@ log "log file: $LOG_FILE"
 log "node1 floating IP: ${NODE1_FLOATING_IP:-unknown}"
 
 # ---- Module list ----
-readonly ALL_STEPS=(00_prereqs 05_dns_patch 10_security_groups 20_sealed_secrets 22_build_images
+# 15_monitoring_stack runs early so by the time services come up there's already
+# a Prometheus to scrape them.
+readonly ALL_STEPS=(00_prereqs 05_dns_patch 10_security_groups
+                    15_monitoring_stack
+                    20_sealed_secrets 22_build_images
                     25_restore_volumes 30_databases 32_restore_data 33_postgres_backup_cron 35_mlflow
                     40_services 50_photoprism
                     60_network_policies 65_gpu_vm_prereqs 70_reranker 75_feedback_trainer 80_grafana 85_dashboard 99_smoke)
@@ -106,7 +111,8 @@ log "============================================"
 log "  bring-up complete"
 log "============================================"
 # ---- Credentials (best-effort fetch; blanks if module wasn't run) ----
-GRAFANA_PASS=$(kubectl -n monitoring get secret loki-stack-grafana \
+# Grafana secret name comes from kube-prometheus-stack chart (release=kube-prom)
+GRAFANA_PASS=$(kubectl -n monitoring get secret kube-prom-grafana \
     -o jsonpath='{.data.admin-password}' 2>/dev/null | base64 -d || true)
 DASH_TOKEN=$(kubectl -n kubernetes-dashboard get secret dashboard-admin-token \
     -o jsonpath='{.data.token}' 2>/dev/null | base64 -d || true)
@@ -124,6 +130,7 @@ log ""
 log "--- Platform ---"
 log "Grafana      : http://${NODE1_FLOATING_IP}:30300"
 log "               user: admin  pass: ${GRAFANA_PASS:-<not deployed>}"
+log "Prometheus   : http://${NODE1_FLOATING_IP}:30900"
 log "K8s Dashboard: https://${NODE1_FLOATING_IP}:30443"
 log "               token: ${DASH_TOKEN:-<not deployed>}"
 log ""
