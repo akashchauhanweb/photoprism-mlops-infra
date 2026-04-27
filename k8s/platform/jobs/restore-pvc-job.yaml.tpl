@@ -11,6 +11,7 @@ spec:
   ttlSecondsAfterFinished: 300
   template:
     spec:
+      nodeName: node1
       restartPolicy: Never
       containers:
         - name: restore
