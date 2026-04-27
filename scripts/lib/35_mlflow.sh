@@ -1,17 +1,7 @@
 # 35_mlflow.sh — MLflow tracking server.
-# Runs AFTER 32_restore_data so MLflow connects to a fully-restored mlflow DB
-# (either from init.sql on a first run, or from the S3 pg_dumpall on a restore).
-# Backend: postgres (mlflow DB, created by init.sql or restored from backup).
-# Artifacts: S3 (mlflow/ prefix in objectstore bucket).
-
-log "ensuring mlflow database exists in postgres..."
-for i in {1..30}; do
-    if kubectl -n photoprism-platform exec postgres-0 -- pg_isready -U postgres >/dev/null 2>&1; then break; fi
-    sleep 2
-done
-kubectl -n photoprism-platform exec postgres-0 -- psql -U photoprism -d photoprism_mlops -tAc \
-    "SELECT 1 FROM pg_database WHERE datname='mlflow'" | grep -q 1 \
-    || kubectl -n photoprism-platform exec postgres-0 -- psql -U photoprism -d photoprism_mlops -c "CREATE DATABASE mlflow" >/dev/null
+# DB existence is owned by 30_databases (mlflow DB ensured there).
+# Restore from S3 (per-DB backup OR Kiran-imported) is owned by 32_restore_data.
+# This module just deploys the server and waits for rollout.
 
 log "applying mlflow..."
 kubectl apply -f "$REPO_ROOT/k8s/platform/mlflow.yaml"

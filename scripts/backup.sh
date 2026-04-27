@@ -133,7 +133,10 @@ backup_qdrant() {
     s3_upload "$out" qdrant snapshot
 }
 
-# ---- 5. postgres (pg_dump) ----
+# ---- 5. postgres (per-DB pg_dump) ----
+# One dump per user database, written to <prefix>/postgres/<db>/<ts>.sql.gz
+# and <prefix>/postgres/<db>/latest.sql.gz. Skips template DBs and 'postgres'.
+# --no-owner --no-acl: avoids ROLE drops on restore (which broke pg_dumpall).
 backup_postgres() {
     log "=== postgres ==="
     local ns=photoprism-platform
@@ -143,13 +146,30 @@ backup_postgres() {
     local user
     user=$(kubectl -n "$ns" get secret postgres-credentials -o jsonpath='{.data.POSTGRES_USER}' | base64 -d)
     [[ -n "$user" ]] || { warn "postgres creds missing; skipping"; return 1; }
-    local out="$WORKDIR/postgres.sql.gz"
-    log "  pg_dumpall (all DBs: photoprism_mlops, mlflow, ...) from pod $pod..."
-    kubectl -n "$ns" exec "$pod" -- sh -c "pg_dumpall --clean --if-exists -U '$user'" \
-        | gzip > "$out" \
-        || { warn "pg_dumpall FAILED"; return 1; }
-    log "  size: $(du -h "$out" | cut -f1)"
-    s3_upload "$out" postgres sql.gz
+
+    # Discover user DBs
+    local dbs
+    dbs=$(kubectl -n "$ns" exec "$pod" -- psql -U "$user" -d postgres -tAc \
+        "SELECT datname FROM pg_database WHERE datistemplate = false AND datname <> 'postgres'" \
+        2>/dev/null | tr -d '\r')
+    [[ -n "$dbs" ]] || { warn "no user DBs found; skipping"; return 1; }
+
+    local rc=0
+    while IFS= read -r db; do
+        [[ -z "$db" ]] && continue
+        log "  [pg/$db] pg_dump from pod $pod..."
+        local out="$WORKDIR/pg-${db}.sql.gz"
+        if ! kubectl -n "$ns" exec "$pod" -- sh -c \
+                "pg_dump --clean --if-exists --no-owner --no-acl -U '$user' '$db'" \
+                | gzip > "$out"; then
+            warn "  [pg/$db] pg_dump FAILED"
+            rc=1
+            continue
+        fi
+        log "    size: $(du -h "$out" | cut -f1)"
+        s3_upload "$out" "postgres/$db" sql.gz || rc=1
+    done <<< "$dbs"
+    return $rc
 }
 
 log "backup timestamp: $TS"
