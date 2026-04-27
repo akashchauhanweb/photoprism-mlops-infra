@@ -11,7 +11,8 @@ spec:
   ttlSecondsAfterFinished: 300
   template:
     spec:
-      nodeName: node1
+      nodeSelector:
+        kubernetes.io/hostname: node1
       restartPolicy: Never
       containers:
         - name: restore
