@@ -23,7 +23,8 @@ spec:
                 --allowed-hosts "*" \
                 --cors-allowed-origins "*" \
                 --backend-store-uri "postgresql://$PG_USER:$PG_PASS@postgres:5432/mlflow" \
-                --default-artifact-root "s3://$S3_BUCKET/mlflow/"
+                --default-artifact-root "s3://$S3_BUCKET/mlflow/" \
+                --artifacts-destination "s3://$S3_BUCKET/mlflow"
           env:
             - { name: PG_USER, valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_USER } } }
             - { name: PG_PASS, valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_PASSWORD } } }
