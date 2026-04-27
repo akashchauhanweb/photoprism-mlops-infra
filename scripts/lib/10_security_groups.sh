@@ -2,13 +2,13 @@
 # Each SG is created only if missing; rules are added only if missing.
 
 declare -A SG_RULES=(
-    [allow-ssh]="22"
-    [allow-30234]="30234"        # photoprism
+    [allow-ssh-proj24]="22"
+    [allow-30234-proj24]="30234"        # photoprism
     [allow-30633-proj24]="30633" # qdrant
-    [allow-30300]="30300"        # grafana
-    [allow-30443]="30443"        # k8s dashboard
-    [allow-30810]="30810"        # search-api
-    [allow-30532]="30532"        # postgres NodePort (feedback-trainer on GPU node)
+    [allow-30300-proj24]="30300"        # grafana
+    [allow-30443-proj24]="30443"        # k8s dashboard
+    [allow-30810-proj24]="30810"        # search-api
+    [allow-30532-proj24]="30532"        # postgres NodePort (feedback-trainer on GPU node)
 )
 
 log "reconciling security groups..."

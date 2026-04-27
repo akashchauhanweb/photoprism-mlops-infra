@@ -7,39 +7,39 @@ data "openstack_networking_subnet_v2" "sharednet1_subnet" {
 }
 
 data "openstack_networking_secgroup_v2" "allow_ssh" {
-  name = "allow-ssh"
+  name = "allow-ssh-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_http_80" {
-  name = "allow-http-80"
+  name = "allow-http-80-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_2342" {
-  name = "allow-2342"
+  name = "allow-2342-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_8000" {
-  name = "allow-8000"
+  name = "allow-8000-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_8080" {
-  name = "allow-8080"
+  name = "allow-8080-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_9001" {
-  name = "allow-9001"
+  name = "allow-9001-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_6333" {
-  name = "allow-6333"
+  name = "allow-6333-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30234" {
-  name = "allow-30234"
+  name = "allow-30234-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30500" {
-  name = "allow-30500"
+  name = "allow-30500-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30633" {
@@ -47,17 +47,17 @@ data "openstack_networking_secgroup_v2" "allow_30633" {
 }
 
 data "openstack_networking_secgroup_v2" "allow_30443" {
-  name = "allow-30443"
+  name = "allow-30443-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30300" {
-  name = "allow-30300"
+  name = "allow-30300-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30810" {
-  name = "allow-30810"
+  name = "allow-30810-proj24"
 }
 
 data "openstack_networking_secgroup_v2" "allow_30532" {
-  name = "allow-30532"
+  name = "allow-30532-proj24"
 }
