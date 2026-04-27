@@ -42,7 +42,7 @@ spec:
     spec:
       containers:
         - name: photoprism
-          image: akashweb/photoprism-ingest:0.2.15
+          image: akashweb/photoprism-ingest:0.2.16
           ports:
             - containerPort: 2342
           envFrom:
