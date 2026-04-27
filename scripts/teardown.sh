@@ -60,7 +60,7 @@ fi
 # We do this BEFORE namespace deletion so helm cleans up CRDs / leftover PVCs cleanly.
 if command -v helm >/dev/null 2>&1; then
     log "uninstalling helm releases in monitoring namespace..."
-    for rel in kube-prom loki promtail loki-stack; do
+    for rel in kube-prom prom-adapter loki promtail loki-stack; do
         if helm -n monitoring list -q 2>/dev/null | grep -qx "$rel"; then
             helm -n monitoring uninstall "$rel" >/dev/null 2>&1 \
                 && log "  uninstalled $rel" \
