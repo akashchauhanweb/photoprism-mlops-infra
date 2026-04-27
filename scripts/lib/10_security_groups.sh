@@ -36,8 +36,16 @@ NODE1_PRIVATE_IP=$(kubectl get node -l 'node-role.kubernetes.io/control-plane' \
 if [[ -z "$NODE1_PRIVATE_IP" ]]; then
     warn "could not derive node1 private IP from kubectl — SGs created but not attached"
 else
-    port_id=$(openstack --os-cloud "$OS_CLOUD" port list \
-        --fixed-ip ip-address="$NODE1_PRIVATE_IP" -f value -c ID | head -1)
+    # Find the port carrying the public/floating IP, NOT the private one.
+    # The sharednet1 port is the one Security Groups apply to for external traffic.
+    port_id=$(openstack --os-cloud "$OS_CLOUD" port list --server node1-proj24 \
+        -f value -c ID -c "Fixed IP Addresses" \
+        | awk '/sharednet|10\.|172\.|129\./ && !/192\.168\./ {print $1; exit}')
+    if [[ -z "$port_id" ]]; then
+        # Fallback: the port whose name starts with "sharednet"
+        port_id=$(openstack --os-cloud "$OS_CLOUD" port list --server node1-proj24 \
+            -f value -c ID -c Name | awk '/sharednet/ {print $1; exit}')
+    fi
     if [[ -n "$port_id" ]]; then
         for sg_name in "${!SG_RULES[@]}"; do
             openstack --os-cloud "$OS_CLOUD" port set "$port_id" \
