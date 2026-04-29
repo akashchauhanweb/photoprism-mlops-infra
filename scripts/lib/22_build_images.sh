@@ -15,7 +15,7 @@ GH_BRANCH="${GH_BRANCH:-main}"
 IMAGES=(
     "${DOCKER_HUB_USER}/pg-backup:${PG_BACKUP_TAG:-0.1.1}:services/pg-backup"
     # Instrumented services — build context is services/ so we can COPY _shared/metrics.py
-    "${DOCKER_HUB_USER}/search-api:${SEARCH_API_TAG:-0.4.0}:services:search-api/Dockerfile"
+    "${DOCKER_HUB_USER}/search-api:${SEARCH_API_TAG:-0.4.1}:services:search-api/Dockerfile"
     "${DOCKER_HUB_USER}/clip-api:${CLIP_API_TAG:-0.2.0}:services:clip-api/Dockerfile"
     "${DOCKER_HUB_USER}/ingest-api:${INGEST_API_TAG:-0.2.0}:services:ingest-api/Dockerfile"
     "${DOCKER_HUB_USER}/feature-worker:${FEATURE_WORKER_TAG:-0.4.0}:services:feature-worker/Dockerfile"

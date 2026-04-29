@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -76,6 +77,9 @@ SEARCH_HITS_RETURNED = ml_histogram(
 )
 CLICKS_TOTAL = ml_counter("pp_search_clicks_total", "Click feedback events recorded")
 RETRAIN_TRIGGERED = ml_counter("pp_search_retrain_trigger_total", "Retrain triggers fired")
+
+# Single-flight guard: prevents concurrent /click handlers from all firing /train
+_retrain_lock = asyncio.Lock()
 UNTRAINED_FEEDBACK = ml_gauge(
     "pp_search_untrained_feedback_rows",
     "Number of search_results rows with trained_at IS NULL",
@@ -288,7 +292,27 @@ async def _click_and_maybe_retrain(body: ClickIn):
         return
 
     log.info(f"[click] feedback row count: {total}")
-    if total >= RETRAIN_THRESHOLD:
+    if total < RETRAIN_THRESHOLD:
+        log.info(f"[click] below threshold ({total}/{RETRAIN_THRESHOLD}) — no retrain")
+        return
+
+    # Single-flight: only one click handler at a time enters the trigger path.
+    # Other concurrent clicks skip immediately rather than queueing.
+    if _retrain_lock.locked():
+        log.info(f"[click] retrain trigger already in progress — skipping")
+        return
+
+    async with _retrain_lock:
+        # Re-check trainer status; a previous retrain might still be running.
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                s = await client.get(f"{RETRAIN_URL}/training/status")
+                if s.status_code == 200 and s.json().get("is_training"):
+                    log.info(f"[click] trainer is_training=true — skipping")
+                    return
+        except Exception as e:
+            log.warning(f"[click] could not check trainer status (proceeding anyway): {e}")
+
         log.info(f"[click] threshold {RETRAIN_THRESHOLD} reached — triggering retrain at {RETRAIN_URL}")
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -297,8 +321,6 @@ async def _click_and_maybe_retrain(body: ClickIn):
                 RETRAIN_TRIGGERED.inc()
         except Exception as e:
             log.warning(f"[click] retrain trigger failed (non-fatal): {e}")
-    else:
-        log.info(f"[click] below threshold ({total}/{RETRAIN_THRESHOLD}) — no retrain")
 
 
 @app.post("/click")
