@@ -456,6 +456,13 @@ def run_finetuning(pairs, image_lookup, config: dict):
                 # Epoch metrics
                 epoch_time = time.time() - epoch_t0
                 avg_loss = total_loss / max(step, 1)
+                # Guard against nan/inf — some bad batches produce these and they
+                # poison downstream JSON serialization at /training/status.
+                import math as _m
+                if _m.isnan(avg_loss) or _m.isinf(avg_loss):
+                    log.warning(f"epoch {epoch+1} produced non-finite loss ({avg_loss}); flagging run")
+                    mlflow.set_tag("bad_run_nonfinite_loss", "true")
+                    avg_loss = -1.0  # sentinel that survives JSON
                 mlflow.log_metric("epoch_loss", avg_loss, step=epoch)
                 mlflow.log_metric("epoch_time_sec", epoch_time, step=epoch)
                 log.info(f"Epoch {epoch+1} complete — avg loss: {avg_loss:.4f}, "
@@ -468,6 +475,100 @@ def run_finetuning(pairs, image_lookup, config: dict):
             mlflow.log_metric("total_train_time_sec", train_time)
             mlflow.log_metric("total_train_time_min", train_time / 60)
             mlflow.log_metric("estimated_gpu_cost_usd", est_cost)
+
+            # ---- Stratified online metrics ----
+            num_clicked = sum(1 for _, _, lbl in pairs if lbl >= 0.5)
+            num_unclicked = len(pairs) - num_clicked
+            mlflow.log_metric("num_clicked", num_clicked)
+            mlflow.log_metric("num_unclicked", num_unclicked)
+            mlflow.log_metric("click_ratio", num_clicked / max(len(pairs), 1))
+            mlflow.log_metric("epoch_samples_per_sec", len(pairs) / max(epoch_time, 1e-6))
+
+            # ---- Quality eval: does the trained reranker put clicked images higher? ----
+            try:
+                from collections import defaultdict
+                groups = defaultdict(list)
+                for q, img, lbl in pairs:
+                    groups[q].append((img, lbl))
+
+                model.eval()
+                eval_t0 = time.time()
+                clicked_scores, unclicked_scores = [], []
+                hits_at_1 = hits_at_5 = hits_at_10 = 0
+                groups_with_click = 0
+                ndcg_1_sum = ndcg_5_sum = ndcg_10_sum = 0.0
+
+                with torch.no_grad():
+                    for query_text, items in groups.items():
+                        if not any(l >= 0.5 for _, l in items):
+                            continue
+                        groups_with_click += 1
+                        scored = []
+                        for img_id, lbl in items:
+                            if img_id not in image_lookup:
+                                continue
+                            messages = [{
+                                "role": "user",
+                                "content": [
+                                    {"type": "image", "image": image_lookup[img_id]},
+                                    {"type": "text", "text": f"Does this image match: '{query_text}'? Score 0-1."},
+                                ],
+                            }]
+                            text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                            inputs = processor(text=[text], images=[image_lookup[img_id]],
+                                              padding=True, return_tensors="pt").to(model.device)
+                            logits = model(**inputs).logits[:, -1, :].mean()
+                            score = torch.sigmoid(logits).item()
+                            scored.append((score, lbl, img_id))
+                            if lbl >= 0.5:
+                                clicked_scores.append(score)
+                            else:
+                                unclicked_scores.append(score)
+                        scored.sort(key=lambda x: -x[0])
+                        for rank, (_, lbl, _) in enumerate(scored, start=1):
+                            if lbl >= 0.5:
+                                if rank <= 1:  hits_at_1  += 1
+                                if rank <= 5:  hits_at_5  += 1
+                                if rank <= 10: hits_at_10 += 1
+                                break
+
+                        # nDCG@k — graded by binary clicked label
+                        import math as _m
+                        num_clicks_in_group = sum(1 for _, l, _ in scored if l >= 0.5)
+                        for k_cut, sum_target in ((1, "ndcg_1"), (5, "ndcg_5"), (10, "ndcg_10")):
+                            dcg = sum((1.0 / _m.log2(r + 1))
+                                       for r, (_, l, _) in enumerate(scored[:k_cut], start=1)
+                                       if l >= 0.5)
+                            ideal_hits = min(num_clicks_in_group, k_cut)
+                            idcg = sum(1.0 / _m.log2(r + 1) for r in range(1, ideal_hits + 1))
+                            ndcg = (dcg / idcg) if idcg > 0 else 0.0
+                            if k_cut == 1:  ndcg_1_sum  += ndcg
+                            if k_cut == 5:  ndcg_5_sum  += ndcg
+                            if k_cut == 10: ndcg_10_sum += ndcg
+
+                eval_time = time.time() - eval_t0
+                if groups_with_click > 0:
+                    mlflow.log_metric("eval_groups_with_click", groups_with_click)
+                    mlflow.log_metric("eval_recall_at_1",  hits_at_1  / groups_with_click)
+                    mlflow.log_metric("eval_recall_at_5",  hits_at_5  / groups_with_click)
+                    mlflow.log_metric("eval_recall_at_10", hits_at_10 / groups_with_click)
+                    mlflow.log_metric("eval_ndcg_at_1",  ndcg_1_sum  / groups_with_click)
+                    mlflow.log_metric("eval_ndcg_at_5",  ndcg_5_sum  / groups_with_click)
+                    mlflow.log_metric("eval_ndcg_at_10", ndcg_10_sum / groups_with_click)
+                if clicked_scores:
+                    mlflow.log_metric("eval_mean_score_clicked",   sum(clicked_scores) / len(clicked_scores))
+                if unclicked_scores:
+                    mlflow.log_metric("eval_mean_score_unclicked", sum(unclicked_scores) / len(unclicked_scores))
+                if clicked_scores and unclicked_scores:
+                    mlflow.log_metric("eval_score_separation",
+                        (sum(clicked_scores)/len(clicked_scores)) - (sum(unclicked_scores)/len(unclicked_scores)))
+                mlflow.log_metric("eval_time_sec", eval_time)
+                log.info(f"Eval: groups={groups_with_click} R@1={hits_at_1/max(groups_with_click,1):.3f} "
+                         f"R@5={hits_at_5/max(groups_with_click,1):.3f} R@10={hits_at_10/max(groups_with_click,1):.3f} "
+                         f"in {eval_time:.1f}s")
+                model.train()
+            except Exception as e:
+                log.warning(f"Stratified eval failed (non-fatal): {e}")
 
             # Save LoRA weights to disk + MLflow
             log.info(f"Saving LoRA weights to {LORA_WEIGHTS_PATH}...")
@@ -572,6 +673,11 @@ def get_training_status():
                     out["status"]         = out.get("status") or "idle_with_history"
         except Exception as e:
             out["mlflow_lookup_error"] = str(e)
+    # Strip nan/inf which FastAPI's JSON encoder rejects
+    import math as _m
+    for k, v in list(out.items()):
+        if isinstance(v, float) and (_m.isnan(v) or _m.isinf(v)):
+            out[k] = None
     return out
 
 
