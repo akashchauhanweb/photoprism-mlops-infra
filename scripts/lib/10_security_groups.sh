@@ -12,7 +12,7 @@ declare -A SG_RULES=(
     [allow-30500-proj24]="30500"        # mlflow
     [allow-30900-proj24]="30900"        # prometheus
     [allow-30903-proj24]="30903"        # alertmanager
-    [allow-8000-proj24]="8000"          # GPU VM: reranker-api
+    [allow-30801-proj24]="30801"        # adminer DB UI    [allow-8000-proj24]="8000"          # GPU VM: reranker-api
     [allow-8002-proj24]="8002"          # GPU VM: feedback-trainer
 )
 

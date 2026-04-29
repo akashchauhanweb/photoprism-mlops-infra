@@ -40,7 +40,7 @@ Available modules:
                     16_autoscaling_alerting
   20_sealed_secrets   22_build_images
   25_restore_volumes 30_databases   32_restore_data   33_postgres_backup_cron   35_mlflow
-  40_services 50_photoprism          60_network_policies
+  40_services 45_adminer 50_photoprism          60_network_policies
   65_gpu_vm_prereqs   70_reranker 75_feedback_trainer
   80_grafana   85_dashboard   99_smoke
 EOF
@@ -87,7 +87,7 @@ readonly ALL_STEPS=(00_prereqs 05_dns_patch 10_security_groups
                     15_monitoring_stack
                     20_sealed_secrets 22_build_images
                     25_restore_volumes 30_databases 32_restore_data 33_postgres_backup_cron 35_mlflow
-                    40_services 50_photoprism
+                    40_services 45_adminer 50_photoprism
                     60_network_policies 65_gpu_vm_prereqs 70_reranker 75_feedback_trainer 80_grafana 85_dashboard 99_smoke)
 
 run_step() {
@@ -125,7 +125,7 @@ log "               user: admin  pass: photoprism-admin"
 log "Search API   : http://${NODE1_FLOATING_IP}:30810/search"
 log "Qdrant       : http://${NODE1_FLOATING_IP}:30633/dashboard/"
 log "MLflow       : http://${NODE1_FLOATING_IP}:30500"
-log "Reranker API : http://${RERANKER_IP}:8000 (internal only)"
+log "Adminer      : http://${NODE1_FLOATING_IP}:30801  (servers: postgres.photoprism-platform / mariadb.photoprism-production)"log "Reranker API : http://${RERANKER_IP}:8000 (internal only)"
 log "Feedback API : http://${RERANKER_IP}:8002/health (internal only)"
 log ""
 log "--- Platform ---"
