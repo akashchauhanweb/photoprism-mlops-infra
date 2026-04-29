@@ -12,7 +12,12 @@ declare -A SG_RULES=(
     [allow-30500-proj24]="30500"        # mlflow
     [allow-30900-proj24]="30900"        # prometheus
     [allow-30903-proj24]="30903"        # alertmanager
+    [allow-8000-proj24]="8000"          # GPU VM: reranker-api
+    [allow-8002-proj24]="8002"          # GPU VM: feedback-trainer
 )
+
+# SGs to attach to the GPU VM port (subset of SG_RULES — only inbound paths into GPU VM)
+GPU_SGS=(allow-ssh-proj24 allow-8000-proj24 allow-8002-proj24)
 
 log "reconciling security groups..."
 existing_sgs=$(openstack --os-cloud "$OS_CLOUD" security group list -f value -c Name)
@@ -55,6 +60,24 @@ else
         log "  attached ${#SG_RULES[@]} SGs to node1 port ($NODE1_PRIVATE_IP)"
     else
         warn "could not find node1 port ($NODE1_PRIVATE_IP) — SGs created but not attached"
+    fi
+fi
+
+log "attaching SGs to GPU VM port..."
+if [[ -z "${RERANKER_IP:-}" || "$RERANKER_IP" == "<FILL_IN>" ]]; then
+    warn "  RERANKER_IP not set — skipping GPU SG attachment"
+else
+    gpu_port_id=$(openstack --os-cloud "$OS_CLOUD" floating ip list \
+        --floating-ip-address "$RERANKER_IP" \
+        -f value -c "Port" 2>/dev/null | head -1)
+    if [[ -z "$gpu_port_id" ]]; then
+        warn "  could not resolve port for GPU VM floating IP $RERANKER_IP — SGs not attached"
+    else
+        for sg_name in "${GPU_SGS[@]}"; do
+            openstack --os-cloud "$OS_CLOUD" port set "$gpu_port_id" \
+                --security-group "$sg_name" >/dev/null 2>&1 || true
+        done
+        log "  attached ${#GPU_SGS[@]} SGs to GPU VM port ($RERANKER_IP)"
     fi
 fi
 
