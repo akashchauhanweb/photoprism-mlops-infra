@@ -280,6 +280,7 @@ def _docker_build_push(image: str, tag: str, src_dir: str):
     subprocess.run(["docker", "tag", full_tag, latest_tag], check=True)
     subprocess.run(["docker", "push", full_tag], check=True)
     subprocess.run(["docker", "push", latest_tag], check=True)
+    subprocess.run(["docker", "image", "prune", "-f"], check=False)
     log.info(f"Pushed {full_tag} and {latest_tag}")
 
 
