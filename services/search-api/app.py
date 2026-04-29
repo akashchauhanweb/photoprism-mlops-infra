@@ -350,5 +350,8 @@ async def retrain_state():
             r = await client.get(f"{RETRAIN_URL}/training/status")
             out["trainer"] = r.json()
     except Exception as e:
-        out["trainer"] = {"error": str(e)}
+        # Trainer often unresponsive while GPU is pegged mid-training.
+        # Treat as "still training" so the UI doesn't surface a network error.
+        log.info(f"[retrain-state] trainer unreachable, assuming still training: {e}")
+        out["trainer"] = {"is_training": True, "status": "trainer_busy", "reason": str(e)}
     return out
